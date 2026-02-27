@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TGClaw</title>
+  <link rel="stylesheet" href="./node_modules/@xterm/xterm/css/xterm.css" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --sidebar-w: 240px;
+      --bg-dark: #17212b;
+      --bg-sidebar: #0e1621;
+      --bg-panel: #1c2733;
+      --bg-tab: #242f3d;
+      --bg-tab-active: #2b5278;
+      --text: #e1e3e6;
+      --text-dim: #8b9bab;
+      --accent: #5eb5f7;
+      --border: #1e2c3a;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg-dark);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+
+    /* 左侧栏 */
+    #sidebar {
+      width: var(--sidebar-w);
+      background: var(--bg-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      -webkit-app-region: no-drag;
+      flex-shrink: 0;
+    }
+
+    #sidebar-header {
+      padding: 16px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      border-bottom: 1px solid var(--border);
+      -webkit-app-region: drag;
+      padding-top: 28px; /* macOS traffic lights */
+    }
+
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 16px;
+      cursor: pointer;
+      transition: background 0.15s;
+      font-size: 13px;
+    }
+
+    .sidebar-item:hover { background: rgba(255,255,255,0.05); }
+    .sidebar-item.active { background: var(--bg-tab-active); }
+
+    .sidebar-item .icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-item.pinned { border-bottom: 1px solid var(--border); }
+    .sidebar-item.pinned .icon { background: var(--accent); }
+
+    .sidebar-item:not(.pinned) .icon { background: var(--bg-tab); }
+
+    .item-info { overflow: hidden; }
+    .item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-status { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+    #add-project {
+      margin: 8px 16px;
+      padding: 8px;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+    #add-project:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* 右侧面板 */
+    #panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-dark);
+      -webkit-app-region: no-drag;
+    }
+
+    /* Tab bar */
+    #tabbar {
+      display: flex;
+      align-items: center;
+      background: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      height: 38px;
+      padding: 0 8px;
+      gap: 2px;
+      overflow-x: auto;
+      -webkit-app-region: drag;
+    }
+
+    .tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      white-space: nowrap;
+      color: var(--text-dim);
+      transition: all 0.15s;
+      -webkit-app-region: no-drag;
+    }
+
+    .tab:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+    .tab.active { background: var(--bg-dark); color: var(--text); }
+
+    .tab .close-tab {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .tab:hover .close-tab { opacity: 0.6; }
+    .tab .close-tab:hover { opacity: 1; background: rgba(255,255,255,0.1); }
+
+    #add-tab {
+      padding: 4px 8px;
+      font-size: 16px;
+      color: var(--text-dim);
+      cursor: pointer;
+      border-radius: 4px;
+      -webkit-app-region: no-drag;
+    }
+    #add-tab:hover { background: rgba(255,255,255,0.05); color: var(--text); }
+
+    /* 终端容器 */
+    #terminal-container {
+      flex: 1;
+      position: relative;
+    }
+
+    .terminal-wrapper {
+      position: absolute;
+      inset: 0;
+      padding: 4px;
+      display: none;
+    }
+    .terminal-wrapper.active { display: block; }
+
+    /* Chat 面板 (OpenClaw) */
+    #chat-panel {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    #chat-panel.active { display: flex; }
+
+    #chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+    }
+
+    .message {
+      max-width: 70%;
+      padding: 8px 12px;
+      border-radius: 12px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .message.from-user {
+      background: var(--bg-tab-active);
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    .message.from-bot {
+      background: var(--bg-panel);
+      margin-right: auto;
+      border-bottom-left-radius: 4px;
+    }
+
+    #chat-input-bar {
+      display: flex;
+      gap: 8px;
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+    }
+
+    #chat-input {
+      flex: 1;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 8px 16px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+    #chat-input:focus { border-color: var(--accent); }
+
+    #chat-send {
+      background: var(--accent);
+      border: none;
+      border-radius: 50%;
+      width: 36px;
+      height: 36px;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    /* Agent 选择弹窗 */
+    .agent-picker {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    .agent-picker.show { display: flex; }
+
+    .agent-picker-inner {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      min-width: 280px;
+    }
+    .agent-picker-inner h3 {
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: var(--accent);
+    }
+
+    .agent-option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    .agent-option:hover { background: rgba(255,255,255,0.05); }
+    .agent-option .emoji { font-size: 20px; }
+  </style>
+</head>
+<body>
+
+  <!-- 左侧栏 -->
+  <div id="sidebar">
+    <div id="sidebar-header">🐾 TGClaw</div>
+
+    <!-- OpenClaw 置顶 -->
+    <div class="sidebar-item pinned active" data-id="openclaw" onclick="selectItem('openclaw')">
+      <div class="icon">🤖</div>
+      <div class="item-info">
+        <div class="item-name">OpenClaw</div>
+        <div class="item-status">Agent orchestrator</div>
+      </div>
+    </div>
+
+    <!-- 项目列表 -->
+    <div id="project-list"></div>
+
+    <div id="add-project" onclick="addProject()">+ Add Project</div>
+  </div>
+
+  <!-- 右侧面板 -->
+  <div id="panel">
+    <!-- Tab bar (项目模式才显示) -->
+    <div id="tabbar" style="display:none">
+      <div id="tab-list"></div>
+      <div id="add-tab" onclick="showAgentPicker()">+</div>
+    </div>
+
+    <!-- 终端容器 -->
+    <div id="terminal-container">
+      <!-- Chat 面板 (OpenClaw) -->
+      <div id="chat-panel" class="active">
+        <div id="chat-messages">
+          <div class="message from-bot">Hey! I'm OpenClaw. Tell me what you need — I'll dispatch agents to get it done. 🐾</div>
+        </div>
+        <div id="chat-input-bar">
+          <input id="chat-input" type="text" placeholder="Message OpenClaw..." onkeydown="if(event.key==='Enter')sendChat()" />
+          <button id="chat-send" onclick="sendChat()">↑</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent 选择弹窗 -->
+  <div class="agent-picker" id="agent-picker">
+    <div class="agent-picker-inner">
+      <h3>Launch Agent</h3>
+      <div class="agent-option" onclick="addAgentTab('claude-code')">
+        <span class="emoji">🟠</span> Claude Code
+      </div>
+      <div class="agent-option" onclick="addAgentTab('codex')">
+        <span class="emoji">🟢</span> Codex
+      </div>
+      <div class="agent-option" onclick="addAgentTab('goose')">
+        <span class="emoji">🦆</span> Goose
+      </div>
+      <div class="agent-option" onclick="addAgentTab('aider')">
+        <span class="emoji">🔵</span> Aider
+      </div>
+      <div class="agent-option" onclick="addAgentTab('shell')">
+        <span class="emoji">⬛</span> Shell
+      </div>
+    </div>
+  </div>
+
+  <script src="./node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="./node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="./renderer.js"></script>
+</body>
+</html>
