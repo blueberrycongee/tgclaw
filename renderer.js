@@ -24,12 +24,13 @@ function selectItem(id) {
   }
 }
 
-function addProject() {
-  const name = prompt('Project name:');
-  if (!name) return;
-
-  const cwd = prompt('Project path:', process.env?.HOME || '~');
+async function addProject() {
+  const cwd = await window.tgclaw.openDirectoryDialog();
   if (!cwd) return;
+
+  const defaultName = cwd.split(/[\\/]/).filter(Boolean).pop() || 'Project';
+  const name = prompt('Project name:', defaultName);
+  if (!name) return;
 
   const id = 'proj-' + Date.now();
   projects.push({ id, name, cwd });
