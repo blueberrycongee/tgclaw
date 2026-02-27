@@ -2,7 +2,7 @@
   "name": "tgclaw",
   "version": "1.0.0",
   "description": "tgclaw electron app",
-  "main": "main.js",
+  "main": "src/main/index.js",
   "scripts": {
     "test": "echo \"No tests configured\" && exit 0",
     "start": "electron .",
