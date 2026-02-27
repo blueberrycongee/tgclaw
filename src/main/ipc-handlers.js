@@ -41,6 +41,18 @@ function registerIpcHandlers(ipcMain) {
     return { url, token };
   });
 
+  ipcMain.handle('terminal:save-log', async (event, text) => {
+    const result = await dialog.showSaveDialog({
+      title: 'Export Terminal Log',
+      defaultPath: 'terminal-log.txt',
+      filters: [{ name: 'Text', extensions: ['txt', 'log'] }],
+    });
+    if (result.canceled || !result.filePath) return false;
+    const fs = require('fs');
+    fs.writeFileSync(result.filePath, text, 'utf8');
+    return true;
+  });
+
   ipcMain.on('project:show-context-menu', (event, { projectId }) => {
     if (!projectId) return;
     popupForSender(Menu.buildFromTemplate([
