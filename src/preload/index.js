@@ -1,5 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+function onIpc(channel) {
+  return (callback) => {
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  };
+}
+
 contextBridge.exposeInMainWorld('tgclaw', {
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
@@ -32,52 +40,12 @@ contextBridge.exposeInMainWorld('tgclaw', {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
-  onProjectDelete: (callback) => {
-    const channel = 'project:delete';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onProjectRename: (callback) => {
-    const channel = 'project:rename';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onAppShortcut: (callback) => {
-    const channel = 'app:shortcut';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onTabKill: (callback) => {
-    const channel = 'tab:kill';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onTabExportLog: (callback) => {
-    const channel = 'tab:export-log';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onTabSplit: (callback) => {
-    const channel = 'tab:split';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onTabRestart: (callback) => {
-    const channel = 'tab:restart';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
-  onTabCopyName: (callback) => {
-    const channel = 'tab:copy-name';
-    const listener = (event, payload) => callback(payload);
-    ipcRenderer.on(channel, listener);
-    return () => ipcRenderer.removeListener(channel, listener);
-  },
+  onProjectDelete: onIpc('project:delete'),
+  onProjectRename: onIpc('project:rename'),
+  onAppShortcut: onIpc('app:shortcut'),
+  onTabKill: onIpc('tab:kill'),
+  onTabExportLog: onIpc('tab:export-log'),
+  onTabSplit: onIpc('tab:split'),
+  onTabRestart: onIpc('tab:restart'),
+  onTabCopyName: onIpc('tab:copy-name'),
 });
