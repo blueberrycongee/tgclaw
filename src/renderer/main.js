@@ -27,6 +27,7 @@ import {
   bindTerminalSearchEvents,
   closeTerminalSearch,
   configureTerminal,
+  exportTerminalLog,
   hideAllTerminals,
   openTerminalSearch,
 } from './terminal.js';
@@ -86,6 +87,11 @@ function bindGlobalEvents() {
       if (tab) nextName = getTabDisplayName(tab);
     }
     await copyTextToClipboard(nextName);
+  });
+
+  window.tgclaw.onTabExportLog(({ projectId, tabId }) => {
+    const tab = (state.tabs[projectId] || []).find((item) => item.id === tabId);
+    if (tab) exportTerminalLog(tab);
   });
 }
 
