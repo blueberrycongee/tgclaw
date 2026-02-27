@@ -4,6 +4,14 @@ const { setupApplicationMenu } = require('./menu');
 const { registerPtyHandlers, killAllTerminals } = require('./pty-manager');
 const { createWindow } = require('./window');
 
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
+});
+
 registerPtyHandlers(ipcMain);
 registerIpcHandlers(ipcMain);
 
