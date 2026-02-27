@@ -108,6 +108,10 @@ export async function addAgentTab(type) {
       deps.renderProjects();
       if (state.currentItem === project.id) renderTabs(project.id);
     },
+    onRestart: () => {
+      closeTab(project.id, tabId);
+      addAgentTab(type);
+    },
   });
   state.tabs[project.id].push({ id: tabId, type, customName: '', ...terminal });
   state.activeTab[project.id] = tabId;
