@@ -177,6 +177,38 @@ ipcMain.on('project:show-context-menu', (event, { projectId }) => {
   }
 });
 
+ipcMain.on('tab:show-context-menu', (event, payload) => {
+  const { projectId, tabId, tabType, tabName } = payload || {};
+  if (!projectId || !tabId) return;
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Kill Process',
+      click: () => {
+        event.sender.send('tab:kill', { projectId, tabId });
+      },
+    },
+    {
+      label: 'Restart',
+      click: () => {
+        event.sender.send('tab:restart', { projectId, tabId, tabType });
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Copy Tab Name',
+      click: () => {
+        event.sender.send('tab:copy-name', { projectId, tabId, tabName });
+      },
+    },
+  ]);
+
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    menu.popup({ window });
+  }
+});
+
 ipcMain.on('notify:process-exit', (event, payload) => {
   const { agentType, projectName, exitCode } = payload || {};
   if (!agentType || !projectName) return;

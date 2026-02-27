@@ -244,6 +244,7 @@ function renderTabs(projectId) {
       class="tab ${t.id === active ? 'active' : ''}"
       draggable="true"
       onclick="switchTab('${projectId}', '${t.id}')"
+      oncontextmenu="onTabContextMenu(event, '${projectId}', '${t.id}')"
       ondragstart="onTabDragStart(event, '${projectId}', '${t.id}')"
       ondragover="onTabDragOver(event, '${projectId}', '${t.id}')"
       ondrop="onTabDrop(event, '${projectId}', '${t.id}')"
@@ -286,6 +287,21 @@ function switchTab(projectId, tabId) {
   if (tab && tab.fitAddon) {
     setTimeout(() => tab.fitAddon.fit(), 50);
   }
+}
+
+function onTabContextMenu(event, projectId, tabId) {
+  event.preventDefault();
+
+  const projectTabs = tabs[projectId] || [];
+  const tab = projectTabs.find((item) => item.id === tabId);
+  if (!tab) return;
+
+  window.tgclaw.showTabContextMenu({
+    projectId,
+    tabId,
+    tabType: tab.type,
+    tabName: getTabDisplayName(tab),
+  });
 }
 
 function getActiveProjectTab(projectId = currentItem) {
@@ -705,6 +721,38 @@ window.tgclaw.onAppShortcut(({ action, index }) => {
   }
 });
 
+window.tgclaw.onTabKill(({ projectId, tabId }) => {
+  closeTab(projectId, tabId);
+});
+
+window.tgclaw.onTabRestart(async ({ projectId, tabId, tabType }) => {
+  const projectTabs = tabs[projectId] || [];
+  const tab = projectTabs.find((item) => item.id === tabId);
+  const restartType = tabType || (tab ? tab.type : '');
+  if (!restartType) return;
+
+  if (currentItem !== projectId) {
+    selectItem(projectId);
+  }
+
+  closeTab(projectId, tabId);
+  await addAgentTab(restartType);
+});
+
+window.tgclaw.onTabCopyName(async ({ projectId, tabId, tabName }) => {
+  let nextName = typeof tabName === 'string' ? tabName : '';
+
+  if (!nextName) {
+    const projectTabs = tabs[projectId] || [];
+    const tab = projectTabs.find((item) => item.id === tabId);
+    if (tab) {
+      nextName = getTabDisplayName(tab);
+    }
+  }
+
+  await copyTextToClipboard(nextName);
+});
+
 // ── Chat (OpenClaw placeholder) ──
 const chatInput = document.getElementById('chat-input');
 
@@ -786,6 +834,30 @@ function updateOpenClawBadge() {
 
   badge.textContent = '';
   badge.style.display = 'none';
+}
+
+async function copyTextToClipboard(text) {
+  const value = String(text || '');
+  if (!value) return;
+
+  if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch (error) {
+      // Fall back to execCommand below.
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = value;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'absolute';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
 }
 
 // ── Resize handling ──

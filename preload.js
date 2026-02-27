@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('tgclaw', {
   saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
   openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   showProjectContextMenu: (projectId) => ipcRenderer.send('project:show-context-menu', { projectId }),
+  showTabContextMenu: (payload) => ipcRenderer.send('tab:show-context-menu', payload),
   notifyProcessExit: ({ agentType, projectName, exitCode }) => ipcRenderer.send('notify:process-exit', {
     agentType,
     projectName,
@@ -41,6 +42,24 @@ contextBridge.exposeInMainWorld('tgclaw', {
   },
   onAppShortcut: (callback) => {
     const channel = 'app:shortcut';
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onTabKill: (callback) => {
+    const channel = 'tab:kill';
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onTabRestart: (callback) => {
+    const channel = 'tab:restart';
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onTabCopyName: (callback) => {
+    const channel = 'tab:copy-name';
     const listener = (event, payload) => callback(payload);
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
