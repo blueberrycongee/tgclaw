@@ -314,6 +314,7 @@
 
     #chat-input-bar {
       display: flex;
+      align-items: flex-end;
       gap: 8px;
       padding: 12px 16px;
       border-top: 1px solid var(--border);
@@ -327,7 +328,12 @@
       padding: 8px 16px;
       color: var(--text);
       font-size: 13px;
+      line-height: 1.4;
       outline: none;
+      resize: none;
+      min-height: 36px;
+      max-height: 120px;
+      overflow-y: hidden;
     }
     #chat-input:focus { border-color: var(--accent); }
 
@@ -435,7 +441,7 @@
           <div class="message from-bot">Hey! I'm OpenClaw. Tell me what you need — I'll dispatch agents to get it done. 🐾</div>
         </div>
         <div id="chat-input-bar">
-          <input id="chat-input" type="text" placeholder="Message OpenClaw..." onkeydown="if(event.key==='Enter')sendChat()" />
+          <textarea id="chat-input" rows="1" placeholder="Message OpenClaw..."></textarea>
           <button id="chat-send" onclick="sendChat()">↑</button>
         </div>
       </div>

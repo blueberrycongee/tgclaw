@@ -514,13 +514,32 @@ window.tgclaw.onAppShortcut(({ action, index }) => {
 });
 
 // ── Chat (OpenClaw placeholder) ──
+const chatInput = document.getElementById('chat-input');
+
+function resizeChatInput() {
+  chatInput.style.height = 'auto';
+  const nextHeight = Math.min(chatInput.scrollHeight, 120);
+  chatInput.style.height = `${nextHeight}px`;
+  chatInput.style.overflowY = chatInput.scrollHeight > 120 ? 'auto' : 'hidden';
+}
+
+chatInput.addEventListener('input', resizeChatInput);
+chatInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && !event.shiftKey) {
+    event.preventDefault();
+    sendChat();
+  }
+});
+
+resizeChatInput();
+
 function sendChat() {
-  const input = document.getElementById('chat-input');
-  const text = input.value.trim();
+  const text = chatInput.value.trim();
   if (!text) return;
 
   appendMessage(text, 'from-user');
-  input.value = '';
+  chatInput.value = '';
+  resizeChatInput();
 
   // Placeholder response
   setTimeout(() => {
