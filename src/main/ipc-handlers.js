@@ -26,6 +26,21 @@ function registerIpcHandlers(ipcMain) {
     store.set('projects', Array.isArray(nextProjects) ? nextProjects : []);
   });
 
+  ipcMain.handle('gateway:get-config', () => {
+    const saved = store.get('gatewayConfig', {});
+    const url = typeof saved?.url === 'string' && saved.url ? saved.url : 'ws://localhost:18789';
+    const token = typeof saved?.token === 'string' ? saved.token : '';
+    return { url, token };
+  });
+
+  ipcMain.handle('gateway:save-config', (event, config) => {
+    const next = config && typeof config === 'object' ? config : {};
+    const url = typeof next.url === 'string' && next.url ? next.url : 'ws://localhost:18789';
+    const token = typeof next.token === 'string' ? next.token : '';
+    store.set('gatewayConfig', { url, token });
+    return { url, token };
+  });
+
   ipcMain.on('project:show-context-menu', (event, { projectId }) => {
     if (!projectId) return;
     popupForSender(Menu.buildFromTemplate([

@@ -5,6 +5,8 @@ contextBridge.exposeInMainWorld('tgclaw', {
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
   getProjects: () => ipcRenderer.invoke('projects:get'),
   saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
+  getGatewayConfig: () => ipcRenderer.invoke('gateway:get-config'),
+  saveGatewayConfig: (config) => ipcRenderer.invoke('gateway:save-config', config),
   openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   showProjectContextMenu: (projectId) => ipcRenderer.send('project:show-context-menu', { projectId }),
   showTabContextMenu: (payload) => ipcRenderer.send('tab:show-context-menu', payload),
