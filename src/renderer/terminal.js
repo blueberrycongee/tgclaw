@@ -6,6 +6,22 @@ import '@xterm/xterm/css/xterm.css';
 import { state } from './state.js';
 
 let resolveActiveProjectTab = () => null;
+const DARK_THEME = {
+  background: '#17212b',
+  foreground: '#e1e3e6',
+  cursor: '#5eb5f7',
+  selectionBackground: 'rgba(94,181,247,0.3)',
+};
+const LIGHT_THEME = {
+  background: '#ffffff',
+  foreground: '#1a1a1a',
+  cursor: '#0066cc',
+  selectionBackground: 'rgba(0,102,204,0.2)',
+};
+
+function getTerminalTheme(theme) {
+  return theme === 'light' ? LIGHT_THEME : DARK_THEME;
+}
 
 export function configureTerminal({ getActiveProjectTab }) {
   resolveActiveProjectTab = getActiveProjectTab;
@@ -85,6 +101,16 @@ export function bindTerminalSearchEvents() {
   terminalSearchClose.addEventListener('click', () => closeTerminalSearch());
 }
 
+export function applyTerminalTheme(theme) {
+  const nextTheme = getTerminalTheme(theme);
+  Object.values(state.tabs).forEach((tabs) => {
+    (tabs || []).forEach((tab) => {
+      if (!tab?.term) return;
+      tab.term.options.theme = nextTheme;
+    });
+  });
+}
+
 export async function createTerminal({ tabId, type, project, onExit }) {
   const wrapper = document.createElement('div');
   wrapper.className = 'terminal-wrapper active';
@@ -92,20 +118,7 @@ export async function createTerminal({ tabId, type, project, onExit }) {
   document.getElementById('terminal-container').appendChild(wrapper);
 
   const term = new Terminal({
-    theme: {
-      background: '#17212b',
-      foreground: '#e1e3e6',
-      cursor: '#5eb5f7',
-      selectionBackground: '#2b5278',
-      black: '#0e1621',
-      red: '#e06c75',
-      green: '#98c379',
-      yellow: '#e5c07b',
-      blue: '#5eb5f7',
-      magenta: '#c678dd',
-      cyan: '#56b6c2',
-      white: '#e1e3e6',
-    },
+    theme: getTerminalTheme(state.terminalTheme),
     fontSize: 13,
     fontFamily: 'Menlo, Monaco, "Courier New", monospace',
     cursorBlink: true,
