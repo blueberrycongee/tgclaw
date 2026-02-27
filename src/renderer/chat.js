@@ -39,6 +39,32 @@ function scrollChatToBottom() {
   container.scrollTop = container.scrollHeight;
 }
 
+async function loadChatHistory() {
+  if (!gateway.connected) return;
+
+  try {
+    const messages = await gateway.chatHistory('default', 50);
+    if (!Array.isArray(messages)) return;
+
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    container.innerHTML = '';
+
+    messages.forEach((message) => {
+      if (!message || typeof message.content !== 'string') return;
+      if (message.role === 'user') {
+        appendMessage(message.content, 'from-user');
+        return;
+      }
+      if (message.role === 'assistant') {
+        appendMessage(message.content, 'from-bot');
+      }
+    });
+  } catch (error) {
+    void error;
+  }
+}
+
 export function appendMessage(text, cls) {
   if (cls === 'from-bot') markBotUnread();
 
@@ -151,7 +177,10 @@ export function initChat() {
   });
 
   gateway.on('chat', handleGatewayChat);
-  gateway.on('connected', () => updateConnectionStatus(true));
+  gateway.on('connected', () => {
+    updateConnectionStatus(true);
+    void loadChatHistory();
+  });
   gateway.on('disconnected', () => updateConnectionStatus(false));
   gateway.on('error', () => updateConnectionStatus(false));
 
