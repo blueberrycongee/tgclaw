@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
+import { showInputModal } from './modal.js';
 
 const deps = {
   renderTabs: () => {},
@@ -57,7 +58,11 @@ export async function addProject() {
   if (!cwd) return;
 
   const defaultName = cwd.split(/[\\/]/).filter(Boolean).pop() || 'Project';
-  const name = prompt('Project name:', defaultName);
+  const name = await showInputModal({
+    title: 'Project Name',
+    placeholder: 'Enter project name',
+    defaultValue: defaultName,
+  });
   if (!name) return;
 
   const id = `proj-${Date.now()}`;
@@ -102,7 +107,11 @@ export async function renameProject(projectId) {
   const project = state.projects.find((item) => item.id === projectId);
   if (!project) return;
 
-  const input = prompt('Rename project:', project.name);
+  const input = await showInputModal({
+    title: 'Rename Project',
+    placeholder: 'Enter new name',
+    defaultValue: project.name,
+  });
   if (input === null) return;
 
   const nextName = input.trim();
