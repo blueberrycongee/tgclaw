@@ -5,6 +5,7 @@ let tabs = {};       // projectId -> [{ id, type, termId, term, exited, cleanup 
 let activeTab = {};  // projectId -> tabId
 let agentPickerSelectionLocked = false;
 let dragTabState = { projectId: null, tabId: null };
+let tabRenameState = { projectId: null, tabId: null };
 let terminalSearchVisible = false;
 
 // ── Sidebar ──
@@ -96,14 +97,72 @@ function deleteProject(projectId) {
 }
 
 // ── Tabs ──
+function getTabDisplayName(tab) {
+  return tab.customName || `${agentEmoji(tab.type)} ${agentLabel(tab.type)}`;
+}
+
+function isTabRenaming(projectId, tabId) {
+  return tabRenameState.projectId === projectId && tabRenameState.tabId === tabId;
+}
+
+function onTabTitleDoubleClick(event, projectId, tabId) {
+  event.stopPropagation();
+  tabRenameState = { projectId, tabId };
+  renderTabs(projectId);
+}
+
+function finishTabRename(projectId, tabId, inputValue) {
+  if (!isTabRenaming(projectId, tabId)) return;
+
+  const projectTabs = tabs[projectId] || [];
+  const tab = projectTabs.find((t) => t.id === tabId);
+  if (tab) {
+    tab.customName = String(inputValue || '').trim();
+  }
+
+  tabRenameState = { projectId: null, tabId: null };
+  renderTabs(projectId);
+}
+
+function onTabRenameKeydown(event, projectId, tabId) {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    event.stopPropagation();
+    finishTabRename(projectId, tabId, event.currentTarget.value);
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    tabRenameState = { projectId: null, tabId: null };
+    renderTabs(projectId);
+  }
+}
+
 function renderTabs(projectId) {
   const projectTabs = tabs[projectId] || [];
   const active = activeTab[projectId];
 
   const tabList = document.getElementById('tab-list');
   tabList.innerHTML = projectTabs
-    .map(
-      (t) => `
+    .map((t) => {
+      const titleMarkup = isTabRenaming(projectId, t.id)
+        ? `
+      <input
+        class="tab-rename-input"
+        type="text"
+        value="${escapeHtml(getTabDisplayName(t))}"
+        data-tab-id="${t.id}"
+        onclick="event.stopPropagation()"
+        ondblclick="event.stopPropagation()"
+        onkeydown="onTabRenameKeydown(event, '${projectId}', '${t.id}')"
+        onblur="finishTabRename('${projectId}', '${t.id}', this.value)"
+      />
+    `
+        : `<span class="tab-title" ondblclick="onTabTitleDoubleClick(event, '${projectId}', '${t.id}')">${escapeHtml(getTabDisplayName(t))}</span>`;
+
+      return `
     <div
       class="tab ${t.id === active ? 'active' : ''}"
       draggable="true"
@@ -113,13 +172,21 @@ function renderTabs(projectId) {
       ondrop="onTabDrop(event, '${projectId}', '${t.id}')"
       ondragend="onTabDragEnd()"
     >
-      ${agentEmoji(t.type)} ${agentLabel(t.type)}
+      ${titleMarkup}
       ${t.exited ? '<span class="tab-exited-flag">[Exited]</span>' : ''}
       <span class="close-tab" onclick="event.stopPropagation(); closeTab('${projectId}', '${t.id}')">✕</span>
     </div>
   `
-    )
+    })
     .join('');
+
+  if (tabRenameState.projectId === projectId && tabRenameState.tabId) {
+    const input = tabList.querySelector(`.tab-rename-input[data-tab-id="${tabRenameState.tabId}"]`);
+    if (input) {
+      input.focus();
+      input.select();
+    }
+  }
 
   // Show/hide terminals
   hideAllTerminals();
@@ -287,6 +354,7 @@ async function addAgentTab(type) {
   tabObj = {
     id: tabId,
     type,
+    customName: '',
     termId,
     term,
     fitAddon,
@@ -314,6 +382,10 @@ function closeTab(projectId, tabId) {
   const projectTabs = tabs[projectId] || [];
   const idx = projectTabs.findIndex((t) => t.id === tabId);
   if (idx === -1) return;
+
+  if (isTabRenaming(projectId, tabId)) {
+    tabRenameState = { projectId: null, tabId: null };
+  }
 
   projectTabs[idx].cleanup();
   projectTabs.splice(idx, 1);
@@ -353,6 +425,11 @@ function clearTabDropIndicators() {
 }
 
 function onTabDragStart(event, projectId, tabId) {
+  if (isTabRenaming(projectId, tabId)) {
+    event.preventDefault();
+    return;
+  }
+
   dragTabState = { projectId, tabId };
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', tabId);

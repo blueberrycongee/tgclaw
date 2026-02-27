@@ -168,6 +168,23 @@ body {
   font-size: 11px;
 }
 
+.tab-title {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab-rename-input {
+  width: 220px;
+  background: var(--bg-dark);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  font-size: 12px;
+  padding: 2px 6px;
+  outline: none;
+}
+
 .tab .close-tab {
   width: 16px;
   height: 16px;
