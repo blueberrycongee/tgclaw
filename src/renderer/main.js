@@ -2,16 +2,9 @@ import './styles.css';
 import { state } from './state.js';
 import { copyTextToClipboard, normalizeProject } from './utils.js';
 import {
-  addProject,
   configureSidebar,
-  deleteProject,
   initSidebarBindings,
-  onProjectDragEnd,
-  onProjectDragOver,
-  onProjectDragStart,
-  onProjectDrop,
   renderProjects,
-  renameProject,
   selectItem,
   updateOpenClawBadge,
 } from './sidebar.js';
@@ -19,23 +12,14 @@ import {
   addAgentTab,
   closeTab,
   configureTabs,
-  finishTabRename,
   getActiveProjectTab,
   getTabDisplayName,
   hideAgentPicker,
   initAgentPicker,
-  onTabContextMenu,
-  onTabDragEnd,
-  onTabDragOver,
-  onTabDragStart,
-  onTabDrop,
-  onTabRenameKeydown,
-  onTabTitleDoubleClick,
-  renderTabs,
-  showAgentPicker,
   switchTab,
+  renderTabs,
 } from './tabs.js';
-import { appendMessage, configureChat, initChat, sendChat } from './chat.js';
+import { configureChat, initChat } from './chat.js';
 import { configureShortcuts, initShortcutBindings } from './shortcuts.js';
 import {
   bindTerminalSearchEvents,
@@ -48,7 +32,7 @@ import { updateWindowTitle } from './title.js';
 
 configureTerminal({ getActiveProjectTab });
 configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWindowTitle });
-configureTabs({ renderProjects, selectItem, updateWindowTitle });
+configureTabs({ renderProjects, updateWindowTitle });
 configureChat({ updateOpenClawBadge });
 configureShortcuts({ addAgentTab, closeTab, switchTab });
 
@@ -117,29 +101,5 @@ initShortcutBindings();
 bindTerminalSearchEvents();
 initChat();
 bindGlobalEvents();
-
-Object.assign(window, {
-  addProject,
-  appendMessage,
-  closeTab,
-  deleteProject,
-  finishTabRename,
-  onProjectDragEnd,
-  onProjectDragOver,
-  onProjectDragStart,
-  onProjectDrop,
-  onTabContextMenu,
-  onTabDragEnd,
-  onTabDragOver,
-  onTabDragStart,
-  onTabDrop,
-  onTabRenameKeydown,
-  onTabTitleDoubleClick,
-  renameProject,
-  selectItem,
-  sendChat,
-  showAgentPicker,
-  switchTab,
-});
 
 void initProjects();

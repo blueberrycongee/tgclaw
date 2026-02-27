@@ -51,6 +51,7 @@ export function sendChat() {
 
 export function initChat() {
   chatInput = document.getElementById('chat-input');
+  document.getElementById('chat-send')?.addEventListener('click', sendChat);
   chatInput.addEventListener('input', resizeChatInput);
   chatInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {

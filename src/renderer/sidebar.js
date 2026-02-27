@@ -71,8 +71,17 @@ export function renderProjects() {
   const list = document.getElementById('project-list');
   list.innerHTML = state.projects.map((project) => {
     const activeCount = (state.tabs[project.id] || []).filter((tab) => !tab.exited).length;
-    return `<div class="sidebar-item ${state.currentItem === project.id ? 'active' : ''}" data-id="${project.id}" data-project-id="${project.id}" draggable="true" onclick="selectItem('${project.id}')" ondragstart="onProjectDragStart(event, '${project.id}')" ondragover="onProjectDragOver(event, '${project.id}')" ondrop="onProjectDrop(event, '${project.id}')" ondragend="onProjectDragEnd()"><div class="icon">📁</div><div class="item-info"><div class="item-name-row"><div class="item-name">${escapeHtml(project.name)}</div>${activeCount > 0 ? `<span class="item-badge">${activeCount}</span>` : ''}</div><div class="item-status">${escapeHtml(project.cwd)}</div></div></div>`;
+    return `<div class="sidebar-item ${state.currentItem === project.id ? 'active' : ''}" data-id="${project.id}" data-project-id="${project.id}" draggable="true"><div class="icon">📁</div><div class="item-info"><div class="item-name-row"><div class="item-name">${escapeHtml(project.name)}</div>${activeCount > 0 ? `<span class="item-badge">${activeCount}</span>` : ''}</div><div class="item-status">${escapeHtml(project.cwd)}</div></div></div>`;
   }).join('');
+
+  list.querySelectorAll('.sidebar-item[data-project-id]').forEach((item) => {
+    const projectId = item.dataset.projectId;
+    item.addEventListener('click', () => selectItem(projectId));
+    item.addEventListener('dragstart', (event) => onProjectDragStart(event, projectId));
+    item.addEventListener('dragover', (event) => onProjectDragOver(event, projectId));
+    item.addEventListener('drop', (event) => void onProjectDrop(event, projectId));
+    item.addEventListener('dragend', onProjectDragEnd);
+  });
 }
 
 export function deleteProject(projectId) {
@@ -157,6 +166,11 @@ export function onProjectDragEnd() {
 }
 
 export function initSidebarBindings() {
+  document.querySelector('.sidebar-item.pinned[data-id="openclaw"]')?.addEventListener('click', () => {
+    selectItem('openclaw');
+  });
+  document.getElementById('add-project')?.addEventListener('click', () => void addProject());
+
   document.getElementById('project-list').addEventListener('contextmenu', (event) => {
     const projectItem = event.target.closest('[data-project-id]');
     if (!projectItem) return;

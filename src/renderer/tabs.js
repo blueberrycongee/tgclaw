@@ -1,20 +1,16 @@
 import { state } from './state.js';
 import { agentEmoji, agentLabel, escapeHtml } from './utils.js';
 import { closeTerminalSearch, createTerminal, hideAllTerminals, showTerminal } from './terminal.js';
-
-const deps = { renderProjects: () => {}, selectItem: () => {}, updateWindowTitle: () => {} };
+const deps = { renderProjects: () => {}, updateWindowTitle: () => {} };
 let agentPickerSelectionLocked = false;
-
 export function configureTabs(nextDeps) { Object.assign(deps, nextDeps); }
 export function getTabDisplayName(tab) { return tab.customName || `${agentEmoji(tab.type)} ${agentLabel(tab.type)}`; }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
-
 export function onTabTitleDoubleClick(event, projectId, tabId) {
   event.stopPropagation();
   state.tabRenameState = { projectId, tabId };
   renderTabs(projectId);
 }
-
 export function finishTabRename(projectId, tabId, inputValue) {
   if (!isTabRenaming(projectId, tabId)) return;
   const tab = (state.tabs[projectId] || []).find((t) => t.id === tabId);
@@ -23,7 +19,6 @@ export function finishTabRename(projectId, tabId, inputValue) {
   renderTabs(projectId);
   deps.updateWindowTitle();
 }
-
 export function onTabRenameKeydown(event, projectId, tabId) {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -38,31 +33,47 @@ export function onTabRenameKeydown(event, projectId, tabId) {
     renderTabs(projectId);
   }
 }
-
 export function renderTabs(projectId) {
   const projectTabs = state.tabs[projectId] || [];
   const active = state.activeTab[projectId];
   const tabList = document.getElementById('tab-list');
   tabList.innerHTML = projectTabs.map((tab) => {
     const title = isTabRenaming(projectId, tab.id)
-      ? `<input class="tab-rename-input" type="text" value="${escapeHtml(getTabDisplayName(tab))}" data-tab-id="${tab.id}" onclick="event.stopPropagation()" ondblclick="event.stopPropagation()" onkeydown="onTabRenameKeydown(event, '${projectId}', '${tab.id}')" onblur="finishTabRename('${projectId}', '${tab.id}', this.value)" />`
-      : `<span class="tab-title" ondblclick="onTabTitleDoubleClick(event, '${projectId}', '${tab.id}')">${escapeHtml(getTabDisplayName(tab))}</span>`;
-    return `<div class="tab ${tab.id === active ? 'active' : ''}" draggable="true" onclick="switchTab('${projectId}', '${tab.id}')" oncontextmenu="onTabContextMenu(event, '${projectId}', '${tab.id}')" ondragstart="onTabDragStart(event, '${projectId}', '${tab.id}')" ondragover="onTabDragOver(event, '${projectId}', '${tab.id}')" ondrop="onTabDrop(event, '${projectId}', '${tab.id}')" ondragend="onTabDragEnd()">${title}${tab.exited ? '<span class="tab-exited-flag">[Exited]</span>' : ''}<span class="close-tab" onclick="event.stopPropagation(); closeTab('${projectId}', '${tab.id}')">✕</span></div>`;
+      ? `<input class="tab-rename-input" type="text" value="${escapeHtml(getTabDisplayName(tab))}" data-tab-id="${tab.id}" />`
+      : `<span class="tab-title" data-tab-id="${tab.id}">${escapeHtml(getTabDisplayName(tab))}</span>`;
+    return `<div class="tab ${tab.id === active ? 'active' : ''}" data-tab-id="${tab.id}" draggable="true">${title}${tab.exited ? '<span class="tab-exited-flag">[Exited]</span>' : ''}<span class="close-tab" data-tab-id="${tab.id}">✕</span></div>`;
   }).join('');
-
+  tabList.querySelectorAll('.tab').forEach((tabEl) => {
+    const tabId = tabEl.dataset.tabId;
+    tabEl.addEventListener('click', () => switchTab(projectId, tabId));
+    tabEl.addEventListener('contextmenu', (event) => onTabContextMenu(event, projectId, tabId));
+    tabEl.addEventListener('dragstart', (event) => onTabDragStart(event, projectId, tabId));
+    tabEl.addEventListener('dragover', (event) => onTabDragOver(event, projectId, tabId));
+    tabEl.addEventListener('drop', (event) => onTabDrop(event, projectId, tabId));
+    tabEl.addEventListener('dragend', onTabDragEnd);
+  });
+  tabList.querySelectorAll('.close-tab').forEach((button) => button.addEventListener('click', (event) => {
+    event.stopPropagation();
+    closeTab(projectId, button.dataset.tabId);
+  }));
+  tabList.querySelectorAll('.tab-title').forEach((titleEl) => titleEl.addEventListener('dblclick', (event) => {
+    onTabTitleDoubleClick(event, projectId, titleEl.dataset.tabId);
+  }));
+  tabList.querySelectorAll('.tab-rename-input').forEach((input) => {
+    const tabId = input.dataset.tabId;
+    input.addEventListener('click', (event) => event.stopPropagation());
+    input.addEventListener('dblclick', (event) => event.stopPropagation());
+    input.addEventListener('keydown', (event) => onTabRenameKeydown(event, projectId, tabId));
+    input.addEventListener('blur', () => finishTabRename(projectId, tabId, input.value));
+  });
   if (state.tabRenameState.projectId === projectId && state.tabRenameState.tabId) {
     const input = tabList.querySelector(`.tab-rename-input[data-tab-id="${state.tabRenameState.tabId}"]`);
-    if (input) {
-      input.focus();
-      input.select();
-    }
+    if (input) { input.focus(); input.select(); }
   }
-
   hideAllTerminals();
   if (active) showTerminal(projectTabs.find((tab) => tab.id === active));
   else if (state.terminalSearchVisible) closeTerminalSearch();
 }
-
 export function switchTab(projectId, tabId) {
   state.activeTab[projectId] = tabId;
   renderTabs(projectId);
@@ -70,24 +81,20 @@ export function switchTab(projectId, tabId) {
   const tab = (state.tabs[projectId] || []).find((item) => item.id === tabId);
   if (tab?.fitAddon) setTimeout(() => tab.fitAddon.fit(), 50);
 }
-
 export function onTabContextMenu(event, projectId, tabId) {
   event.preventDefault();
   const tab = (state.tabs[projectId] || []).find((item) => item.id === tabId);
   if (!tab) return;
   window.tgclaw.showTabContextMenu({ projectId, tabId, tabType: tab.type, tabName: getTabDisplayName(tab) });
 }
-
 export function getActiveProjectTab(projectId = state.currentItem) {
   const active = state.activeTab[projectId];
   return (state.tabs[projectId] || []).find((tab) => tab.id === active) || null;
 }
-
 export async function addAgentTab(type) {
   hideAgentPicker();
   const project = state.projects.find((item) => item.id === state.currentItem);
   if (!project) return;
-
   const tabId = `tab-${Date.now()}`;
   if (!state.tabs[project.id]) state.tabs[project.id] = [];
   const terminal = await createTerminal({
@@ -102,7 +109,6 @@ export async function addAgentTab(type) {
       if (state.currentItem === project.id) renderTabs(project.id);
     },
   });
-
   state.tabs[project.id].push({ id: tabId, type, customName: '', ...terminal });
   state.activeTab[project.id] = tabId;
   renderTabs(project.id);
@@ -110,7 +116,6 @@ export async function addAgentTab(type) {
   deps.updateWindowTitle();
   setTimeout(() => terminal.fitAddon.fit(), 150);
 }
-
 export function closeTab(projectId, tabId) {
   const projectTabs = state.tabs[projectId] || [];
   const index = projectTabs.findIndex((tab) => tab.id === tabId);
@@ -123,11 +128,9 @@ export function closeTab(projectId, tabId) {
   deps.renderProjects();
   deps.updateWindowTitle();
 }
-
 function clearTabDropIndicators() {
   document.querySelectorAll('.tab').forEach((tabEl) => tabEl.classList.remove('drag-over-before', 'drag-over-after'));
 }
-
 export function onTabDragStart(event, projectId, tabId) {
   if (isTabRenaming(projectId, tabId)) return event.preventDefault();
   state.dragTabState = { projectId, tabId };
@@ -135,7 +138,6 @@ export function onTabDragStart(event, projectId, tabId) {
   event.dataTransfer.setData('text/plain', tabId);
   event.currentTarget.classList.add('dragging');
 }
-
 export function onTabDragOver(event, projectId, targetTabId) {
   if (state.dragTabState.projectId !== projectId || state.dragTabState.tabId === targetTabId) return;
   event.preventDefault();
@@ -144,7 +146,6 @@ export function onTabDragOver(event, projectId, targetTabId) {
   const rect = event.currentTarget.getBoundingClientRect();
   event.currentTarget.classList.add(event.clientX > rect.left + rect.width / 2 ? 'drag-over-after' : 'drag-over-before');
 }
-
 export function onTabDrop(event, projectId, targetTabId) {
   event.preventDefault();
   if (state.dragTabState.projectId !== projectId) return onTabDragEnd();
@@ -152,7 +153,6 @@ export function onTabDrop(event, projectId, targetTabId) {
   const from = projectTabs.findIndex((tab) => tab.id === state.dragTabState.tabId);
   const to = projectTabs.findIndex((tab) => tab.id === targetTabId);
   if (from < 0 || to < 0 || from === to) return onTabDragEnd();
-
   const rect = event.currentTarget.getBoundingClientRect();
   let next = to + (event.clientX > rect.left + rect.width / 2 ? 1 : 0);
   if (from < next) next -= 1;
@@ -161,37 +161,32 @@ export function onTabDrop(event, projectId, targetTabId) {
   onTabDragEnd();
   renderTabs(projectId);
 }
-
 export function onTabDragEnd() {
   state.dragTabState = { projectId: null, tabId: null };
   document.querySelectorAll('.tab').forEach((tabEl) => tabEl.classList.remove('dragging'));
   clearTabDropIndicators();
 }
-
 export function showAgentPicker() {
   agentPickerSelectionLocked = false;
   document.getElementById('agent-picker').classList.add('show');
 }
-
 export function hideAgentPicker() {
   agentPickerSelectionLocked = false;
   document.getElementById('agent-picker').classList.remove('show');
 }
-
 export function initAgentPicker() {
+  document.getElementById('add-tab')?.addEventListener('click', showAgentPicker);
   document.getElementById('agent-picker').addEventListener('click', (event) => {
     if (event.target.id === 'agent-picker') hideAgentPicker();
   });
-  document.querySelectorAll('.agent-option').forEach((option) => {
-    option.addEventListener('click', () => {
-      const type = option.dataset.agentType;
-      if (!type || agentPickerSelectionLocked) return;
-      agentPickerSelectionLocked = true;
-      option.classList.add('pick-feedback');
-      setTimeout(() => {
-        option.classList.remove('pick-feedback');
-        addAgentTab(type);
-      }, 180);
-    });
-  });
+  document.querySelectorAll('.agent-option').forEach((option) => option.addEventListener('click', () => {
+    const type = option.dataset.agentType;
+    if (!type || agentPickerSelectionLocked) return;
+    agentPickerSelectionLocked = true;
+    option.classList.add('pick-feedback');
+    setTimeout(() => {
+      option.classList.remove('pick-feedback');
+      addAgentTab(type);
+    }, 180);
+  }));
 }
