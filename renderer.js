@@ -1,7 +1,7 @@
 // ── State ──
 let currentItem = 'openclaw';
 let projects = [];
-let tabs = {};       // projectId -> [{ id, type, termId, term, cleanup }]
+let tabs = {};       // projectId -> [{ id, type, termId, term, exited, cleanup }]
 let activeTab = {};  // projectId -> tabId
 let agentPickerSelectionLocked = false;
 let dragTabState = { projectId: null, tabId: null };
@@ -110,6 +110,7 @@ function renderTabs(projectId) {
       ondragend="onTabDragEnd()"
     >
       ${agentEmoji(t.type)} ${agentLabel(t.type)}
+      ${t.exited ? '<span class="tab-exited-flag">[Exited]</span>' : ''}
       <span class="close-tab" onclick="event.stopPropagation(); closeTab('${projectId}', '${t.id}')">✕</span>
     </div>
   `
@@ -250,12 +251,19 @@ async function addAgentTab(type) {
   }
 
   // Wire up pty <-> xterm
+  let tabObj = null;
+
   const cleanupData = window.tgclaw.onPtyData(termId, (data) => {
     term.write(data);
   });
 
   const cleanupExit = window.tgclaw.onPtyExit(termId, (code) => {
     term.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
+    if (!tabObj) return;
+    tabObj.exited = true;
+    if (currentItem === project.id) {
+      renderTabs(project.id);
+    }
   });
 
   term.onData((data) => {
@@ -266,13 +274,14 @@ async function addAgentTab(type) {
     window.tgclaw.resizePty(termId, cols, rows);
   });
 
-  const tabObj = {
+  tabObj = {
     id: tabId,
     type,
     termId,
     term,
     fitAddon,
     searchAddon,
+    exited: false,
     wrapperEl: wrapper,
     cleanup: () => {
       cleanupData();
