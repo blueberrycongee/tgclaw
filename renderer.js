@@ -43,7 +43,7 @@ function renderProjects() {
   list.innerHTML = projects
     .map(
       (p) => `
-    <div class="sidebar-item ${currentItem === p.id ? 'active' : ''}" data-id="${p.id}" onclick="selectItem('${p.id}')">
+    <div class="sidebar-item ${currentItem === p.id ? 'active' : ''}" data-id="${p.id}" data-project-id="${p.id}" onclick="selectItem('${p.id}')">
       <div class="icon">📁</div>
       <div class="item-info">
         <div class="item-name">${escapeHtml(p.name)}</div>
@@ -53,6 +53,24 @@ function renderProjects() {
   `
     )
     .join('');
+}
+
+function deleteProject(projectId) {
+  const index = projects.findIndex((p) => p.id === projectId);
+  if (index === -1) return;
+
+  const projectTabs = tabs[projectId] || [];
+  projectTabs.forEach((tab) => tab.cleanup());
+
+  delete tabs[projectId];
+  delete activeTab[projectId];
+  projects.splice(index, 1);
+
+  if (currentItem === projectId) {
+    selectItem('openclaw');
+  }
+
+  renderProjects();
 }
 
 // ── Tabs ──
@@ -228,6 +246,18 @@ function hideAgentPicker() {
 
 document.getElementById('agent-picker').addEventListener('click', (e) => {
   if (e.target.id === 'agent-picker') hideAgentPicker();
+});
+
+document.getElementById('project-list').addEventListener('contextmenu', (event) => {
+  const projectItem = event.target.closest('[data-project-id]');
+  if (!projectItem) return;
+
+  event.preventDefault();
+  window.tgclaw.showProjectContextMenu(projectItem.dataset.projectId);
+});
+
+window.tgclaw.onProjectDelete(({ projectId }) => {
+  deleteProject(projectId);
 });
 
 // ── Chat (OpenClaw placeholder) ──

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const pty = require('node-pty');
 
@@ -92,6 +92,24 @@ ipcMain.handle('dialog:open-directory', async () => {
   }
 
   return result.filePaths[0];
+});
+
+ipcMain.on('project:show-context-menu', (event, { projectId }) => {
+  if (!projectId) return;
+
+  const menu = Menu.buildFromTemplate([
+    {
+      label: 'Delete Project',
+      click: () => {
+        event.sender.send('project:delete', { projectId });
+      },
+    },
+  ]);
+
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (window) {
+    menu.popup({ window });
+  }
 });
 
 ipcMain.on('pty:write', (event, { id, data }) => {
