@@ -143,6 +143,9 @@
 
     .tab:hover { background: rgba(255,255,255,0.05); color: var(--text); }
     .tab.active { background: var(--bg-dark); color: var(--text); }
+    .tab.dragging { opacity: 0.45; }
+    .tab.drag-over-before { box-shadow: inset 2px 0 0 var(--accent); }
+    .tab.drag-over-after { box-shadow: inset -2px 0 0 var(--accent); }
 
     .tab .close-tab {
       width: 16px;

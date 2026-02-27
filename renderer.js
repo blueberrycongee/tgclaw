@@ -4,6 +4,7 @@ let projects = [];
 let tabs = {};       // projectId -> [{ id, type, termId, term, cleanup }]
 let activeTab = {};  // projectId -> tabId
 let agentPickerSelectionLocked = false;
+let dragTabState = { projectId: null, tabId: null };
 
 // ── Sidebar ──
 function selectItem(id) {
@@ -83,7 +84,15 @@ function renderTabs(projectId) {
   tabList.innerHTML = projectTabs
     .map(
       (t) => `
-    <div class="tab ${t.id === active ? 'active' : ''}" onclick="switchTab('${projectId}', '${t.id}')">
+    <div
+      class="tab ${t.id === active ? 'active' : ''}"
+      draggable="true"
+      onclick="switchTab('${projectId}', '${t.id}')"
+      ondragstart="onTabDragStart(event, '${projectId}', '${t.id}')"
+      ondragover="onTabDragOver(event, '${projectId}', '${t.id}')"
+      ondrop="onTabDrop(event, '${projectId}', '${t.id}')"
+      ondragend="onTabDragEnd()"
+    >
       ${agentEmoji(t.type)} ${agentLabel(t.type)}
       <span class="close-tab" onclick="event.stopPropagation(); closeTab('${projectId}', '${t.id}')">✕</span>
     </div>
@@ -228,6 +237,70 @@ function closeTab(projectId, tabId) {
   }
 
   renderTabs(projectId);
+}
+
+function clearTabDropIndicators() {
+  document.querySelectorAll('.tab').forEach((tabEl) => {
+    tabEl.classList.remove('drag-over-before', 'drag-over-after');
+  });
+}
+
+function onTabDragStart(event, projectId, tabId) {
+  dragTabState = { projectId, tabId };
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', tabId);
+  event.currentTarget.classList.add('dragging');
+}
+
+function onTabDragOver(event, projectId, targetTabId) {
+  if (dragTabState.projectId !== projectId) return;
+  if (dragTabState.tabId === targetTabId) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+
+  clearTabDropIndicators();
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const dropAfter = event.clientX > rect.left + rect.width / 2;
+  event.currentTarget.classList.add(dropAfter ? 'drag-over-after' : 'drag-over-before');
+}
+
+function onTabDrop(event, projectId, targetTabId) {
+  event.preventDefault();
+
+  if (dragTabState.projectId !== projectId) {
+    onTabDragEnd();
+    return;
+  }
+
+  const projectTabs = tabs[projectId] || [];
+  const sourceIndex = projectTabs.findIndex((tab) => tab.id === dragTabState.tabId);
+  const targetIndex = projectTabs.findIndex((tab) => tab.id === targetTabId);
+
+  if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+    onTabDragEnd();
+    return;
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const dropAfter = event.clientX > rect.left + rect.width / 2;
+  let nextIndex = targetIndex + (dropAfter ? 1 : 0);
+  if (sourceIndex < nextIndex) nextIndex -= 1;
+
+  const [movedTab] = projectTabs.splice(sourceIndex, 1);
+  projectTabs.splice(nextIndex, 0, movedTab);
+
+  onTabDragEnd();
+  renderTabs(projectId);
+}
+
+function onTabDragEnd() {
+  dragTabState = { projectId: null, tabId: null };
+  document.querySelectorAll('.tab').forEach((tabEl) => {
+    tabEl.classList.remove('dragging');
+  });
+  clearTabDropIndicators();
 }
 
 function hideAllTerminals() {
