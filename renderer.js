@@ -8,6 +8,7 @@ let dragTabState = { projectId: null, tabId: null };
 let dragProjectState = { projectId: null };
 let tabRenameState = { projectId: null, tabId: null };
 let terminalSearchVisible = false;
+let unreadCount = 0;
 
 // ── Sidebar ──
 function normalizeProject(project) {
@@ -31,6 +32,8 @@ function selectItem(id) {
   });
 
   if (id === 'openclaw') {
+    unreadCount = 0;
+    updateOpenClawBadge();
     document.getElementById('tabbar').style.display = 'none';
     document.getElementById('chat-panel').classList.add('active');
     closeTerminalSearch();
@@ -737,6 +740,11 @@ function sendChat() {
 }
 
 function appendMessage(text, cls) {
+  if (cls === 'from-bot' && currentItem !== 'openclaw') {
+    unreadCount += 1;
+    updateOpenClawBadge();
+  }
+
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = `message ${cls}`;
@@ -766,6 +774,20 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+function updateOpenClawBadge() {
+  const badge = document.getElementById('openclaw-badge');
+  if (!badge) return;
+
+  if (unreadCount > 0) {
+    badge.textContent = String(unreadCount);
+    badge.style.display = 'inline-flex';
+    return;
+  }
+
+  badge.textContent = '';
+  badge.style.display = 'none';
+}
+
 // ── Resize handling ──
 window.addEventListener('resize', () => {
   if (currentItem === 'openclaw') return;
@@ -781,6 +803,7 @@ async function initProjects() {
     ? savedProjects.map(normalizeProject).filter(Boolean)
     : [];
   renderProjects();
+  updateOpenClawBadge();
 }
 
 void initProjects();

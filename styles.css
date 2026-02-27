@@ -102,6 +102,19 @@ body {
   padding: 0 4px;
   flex-shrink: 0;
 }
+.openclaw-badge {
+  display: none;
+  background: #ef4444;
+  color: white;
+  font-size: 10px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  text-align: center;
+  line-height: 16px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
 .item-status { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
 #add-project {
