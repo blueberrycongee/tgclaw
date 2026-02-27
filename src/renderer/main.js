@@ -30,6 +30,7 @@ import {
   exportTerminalLog,
   hideAllTerminals,
   openTerminalSearch,
+  splitTerminal,
 } from './terminal.js';
 import { updateWindowTitle } from './title.js';
 
@@ -92,6 +93,12 @@ function bindGlobalEvents() {
   window.tgclaw.onTabExportLog(({ projectId, tabId }) => {
     const tab = (state.tabs[projectId] || []).find((item) => item.id === tabId);
     if (tab) exportTerminalLog(tab);
+  });
+
+  window.tgclaw.onTabSplit(({ projectId, tabId }) => {
+    const tab = (state.tabs[projectId] || []).find((item) => item.id === tabId);
+    const project = state.projects.find((item) => item.id === projectId);
+    if (tab && project && !tab.splitTerminal) splitTerminal(tab, project);
   });
 }
 
