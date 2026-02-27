@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const pty = require('node-pty');
 
@@ -78,6 +78,20 @@ ipcMain.handle('agent:spawn', (event, { type, cwd, cols, rows }) => {
   });
 
   return id;
+});
+
+ipcMain.handle('dialog:open-directory', async () => {
+  const result = await dialog.showOpenDialog({
+    title: 'Select Project Directory',
+    properties: ['openDirectory'],
+    defaultPath: process.env.HOME,
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    return null;
+  }
+
+  return result.filePaths[0];
 });
 
 ipcMain.on('pty:write', (event, { id, data }) => {
