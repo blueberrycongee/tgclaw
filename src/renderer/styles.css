@@ -662,3 +662,17 @@ body.light-theme {
   background: #5eb5f7;
   color: #fff;
 }
+
+#chat-stop {
+  background: #e74c3c;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
