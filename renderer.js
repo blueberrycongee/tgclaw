@@ -7,6 +7,18 @@ let agentPickerSelectionLocked = false;
 let dragTabState = { projectId: null, tabId: null };
 
 // ── Sidebar ──
+function normalizeProject(project) {
+  if (!project || typeof project !== 'object') return null;
+  if (typeof project.id !== 'string' || typeof project.name !== 'string' || typeof project.cwd !== 'string') {
+    return null;
+  }
+  return { id: project.id, name: project.name, cwd: project.cwd };
+}
+
+async function persistProjects() {
+  await window.tgclaw.saveProjects(projects);
+}
+
 function selectItem(id) {
   currentItem = id;
 
@@ -36,6 +48,7 @@ async function addProject() {
 
   const id = 'proj-' + Date.now();
   projects.push({ id, name, cwd });
+  await persistProjects();
   renderProjects();
   selectItem(id);
 }
@@ -67,6 +80,7 @@ function deleteProject(projectId) {
   delete tabs[projectId];
   delete activeTab[projectId];
   projects.splice(index, 1);
+  void persistProjects();
 
   if (currentItem === projectId) {
     selectItem('openclaw');
@@ -449,3 +463,13 @@ window.addEventListener('resize', () => {
   const tab = projectTabs.find((t) => t.id === active);
   if (tab && tab.fitAddon) tab.fitAddon.fit();
 });
+
+async function initProjects() {
+  const savedProjects = await window.tgclaw.getProjects();
+  projects = Array.isArray(savedProjects)
+    ? savedProjects.map(normalizeProject).filter(Boolean)
+    : [];
+  renderProjects();
+}
+
+void initProjects();

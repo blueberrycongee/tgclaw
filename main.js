@@ -1,9 +1,11 @@
 const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
 const path = require('path');
 const pty = require('node-pty');
+const Store = require('electron-store');
 
 const terminals = {};
 let nextTermId = 1;
+const store = new Store();
 
 function sendShortcutAction(action, payload = {}) {
   const window = BrowserWindow.getFocusedWindow();
@@ -132,6 +134,16 @@ ipcMain.handle('dialog:open-directory', async () => {
   }
 
   return result.filePaths[0];
+});
+
+ipcMain.handle('projects:get', () => {
+  const saved = store.get('projects', []);
+  return Array.isArray(saved) ? saved : [];
+});
+
+ipcMain.handle('projects:save', (event, nextProjects) => {
+  const normalized = Array.isArray(nextProjects) ? nextProjects : [];
+  store.set('projects', normalized);
 });
 
 ipcMain.on('project:show-context-menu', (event, { projectId }) => {

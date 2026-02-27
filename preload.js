@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('tgclaw', {
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
+  getProjects: () => ipcRenderer.invoke('projects:get'),
+  saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
   openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   showProjectContextMenu: (projectId) => ipcRenderer.send('project:show-context-menu', { projectId }),
   writePty: (id, data) => ipcRenderer.send('pty:write', { id, data }),
