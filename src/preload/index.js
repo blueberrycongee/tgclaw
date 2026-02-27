@@ -56,6 +56,12 @@ contextBridge.exposeInMainWorld('tgclaw', {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
+  onTabExportLog: (callback) => {
+    const channel = 'tab:export-log';
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   onTabRestart: (callback) => {
     const channel = 'tab:restart';
     const listener = (event, payload) => callback(payload);
