@@ -606,3 +606,59 @@ body.light-theme {
   40% { transform: scale(0.97); }
   100% { transform: scale(1); }
 }
+
+.input-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.input-modal-inner {
+  background: var(--bg-secondary, #242f3d);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 320px;
+  max-width: 400px;
+}
+.input-modal-inner h3 {
+  font-size: 14px;
+  margin-bottom: 12px;
+  color: var(--accent);
+}
+.input-modal-inner input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-primary, var(--bg-dark));
+  border: 1px solid var(--border);
+  color: var(--text);
+  outline: none;
+}
+.input-modal-inner input:focus { border-color: var(--accent); }
+
+.input-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.input-modal-actions button {
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.input-modal-cancel {
+  background: transparent;
+  color: var(--text-dim);
+}
+.input-modal-ok {
+  background: #5eb5f7;
+  color: #fff;
+}
