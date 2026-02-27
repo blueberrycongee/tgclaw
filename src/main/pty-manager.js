@@ -32,9 +32,14 @@ function bindTerminal(event, id, processRef) {
 function registerPtyHandlers(ipcMain) {
   ipcMain.handle('pty:create', (event, { cols, rows, cwd, cmd }) => {
     const id = nextTermId++;
-    const processRef = spawnProcess({ cmd: cmd || process.env.SHELL || '/bin/zsh', cols, rows, cwd });
-    bindTerminal(event, id, processRef);
-    return id;
+    try {
+      const processRef = spawnProcess({ cmd: cmd || process.env.SHELL || '/bin/zsh', cols, rows, cwd });
+      bindTerminal(event, id, processRef);
+      return id;
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      return { error: `Failed to spawn shell: ${message}` };
+    }
   });
 
   ipcMain.handle('agent:spawn', (event, { type, cwd, cols, rows }) => {
