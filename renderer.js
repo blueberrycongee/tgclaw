@@ -263,6 +263,11 @@ async function addAgentTab(type) {
 
   const cleanupExit = window.tgclaw.onPtyExit(termId, (code) => {
     term.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
+    window.tgclaw.notifyProcessExit({
+      agentType: type,
+      projectName: project.name,
+      exitCode: code,
+    });
     if (!tabObj) return;
     tabObj.exited = true;
     renderProjects();

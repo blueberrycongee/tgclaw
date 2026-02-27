@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('tgclaw', {
   saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
   openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   showProjectContextMenu: (projectId) => ipcRenderer.send('project:show-context-menu', { projectId }),
+  notifyProcessExit: ({ agentType, projectName, exitCode }) => ipcRenderer.send('notify:process-exit', {
+    agentType,
+    projectName,
+    exitCode,
+  }),
   writePty: (id, data) => ipcRenderer.send('pty:write', { id, data }),
   resizePty: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
   killPty: (id) => ipcRenderer.send('pty:kill', { id }),

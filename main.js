@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, Menu, dialog, ipcMain, Notification } = require('electron');
 const path = require('path');
 const pty = require('node-pty');
 const Store = require('electron-store');
@@ -169,6 +169,21 @@ ipcMain.on('project:show-context-menu', (event, { projectId }) => {
   if (window) {
     menu.popup({ window });
   }
+});
+
+ipcMain.on('notify:process-exit', (event, payload) => {
+  const { agentType, projectName, exitCode } = payload || {};
+  if (!agentType || !projectName) return;
+
+  if (typeof Notification.isSupported === 'function' && !Notification.isSupported()) {
+    return;
+  }
+
+  const notification = new Notification({
+    title: 'TGClaw Process Exit',
+    body: `${agentType} · ${projectName} exited with code ${String(exitCode)}`,
+  });
+  notification.show();
 });
 
 ipcMain.on('pty:write', (event, { id, data }) => {
