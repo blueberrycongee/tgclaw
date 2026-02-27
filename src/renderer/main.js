@@ -22,6 +22,7 @@ import {
 import { configureChat, initChat } from './chat.js';
 import { initSettings } from './settings.js';
 import { configureShortcuts, initShortcutBindings } from './shortcuts.js';
+import { initThemeToggle } from './theme.js';
 import {
   bindTerminalSearchEvents,
   closeTerminalSearch,
@@ -101,6 +102,7 @@ initAgentPicker();
 initShortcutBindings();
 bindTerminalSearchEvents();
 initChat();
+initThemeToggle();
 void initSettings();
 bindGlobalEvents();
 
