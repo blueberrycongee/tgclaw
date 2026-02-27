@@ -5,6 +5,7 @@ let tabs = {};       // projectId -> [{ id, type, termId, term, cleanup }]
 let activeTab = {};  // projectId -> tabId
 let agentPickerSelectionLocked = false;
 let dragTabState = { projectId: null, tabId: null };
+let terminalSearchVisible = false;
 
 // ── Sidebar ──
 function normalizeProject(project) {
@@ -30,6 +31,7 @@ function selectItem(id) {
   if (id === 'openclaw') {
     document.getElementById('tabbar').style.display = 'none';
     document.getElementById('chat-panel').classList.add('active');
+    closeTerminalSearch();
     hideAllTerminals();
   } else {
     document.getElementById('tabbar').style.display = 'flex';
@@ -121,6 +123,8 @@ function renderTabs(projectId) {
     if (tab && tab.wrapperEl) {
       tab.wrapperEl.style.display = 'block';
     }
+  } else if (terminalSearchVisible) {
+    closeTerminalSearch();
   }
 }
 
@@ -133,6 +137,51 @@ function switchTab(projectId, tabId) {
   if (tab && tab.fitAddon) {
     setTimeout(() => tab.fitAddon.fit(), 50);
   }
+}
+
+function getActiveProjectTab(projectId = currentItem) {
+  const projectTabs = tabs[projectId] || [];
+  const active = activeTab[projectId];
+  return projectTabs.find((tab) => tab.id === active) || null;
+}
+
+function openTerminalSearch() {
+  if (currentItem === 'openclaw') return;
+
+  const active = getActiveProjectTab();
+  if (!active || !active.searchAddon) return;
+
+  const bar = document.getElementById('terminal-search');
+  const input = document.getElementById('terminal-search-input');
+
+  terminalSearchVisible = true;
+  bar.classList.add('show');
+  input.focus();
+  input.select();
+}
+
+function closeTerminalSearch() {
+  const bar = document.getElementById('terminal-search');
+  if (!bar) return;
+
+  terminalSearchVisible = false;
+  bar.classList.remove('show');
+}
+
+function runTerminalSearch(next = true) {
+  const input = document.getElementById('terminal-search-input');
+  const active = getActiveProjectTab();
+  if (!input || !active || !active.searchAddon) return;
+
+  const query = input.value;
+  if (!query) return;
+
+  if (next) {
+    active.searchAddon.findNext(query);
+    return;
+  }
+
+  active.searchAddon.findPrevious(query);
 }
 
 async function addAgentTab(type) {
@@ -174,8 +223,10 @@ async function addAgentTab(type) {
   });
 
   const fitAddon = new FitAddon.FitAddon();
+  const searchAddon = new SearchAddon.SearchAddon();
   const webLinksAddon = new WebLinksAddon.WebLinksAddon();
   term.loadAddon(fitAddon);
+  term.loadAddon(searchAddon);
   term.loadAddon(webLinksAddon);
   term.open(wrapper);
 
@@ -221,6 +272,7 @@ async function addAgentTab(type) {
     termId,
     term,
     fitAddon,
+    searchAddon,
     wrapperEl: wrapper,
     cleanup: () => {
       cleanupData();
@@ -359,13 +411,48 @@ document.getElementById('agent-picker').addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
+    if (currentItem !== 'openclaw') {
+      event.preventDefault();
+      openTerminalSearch();
+    }
+    return;
+  }
+
   if (event.key !== 'Escape') return;
 
   const picker = document.getElementById('agent-picker');
   if (picker.classList.contains('show')) {
     hideAgentPicker();
+    return;
+  }
+
+  if (terminalSearchVisible) {
+    closeTerminalSearch();
   }
 });
+
+const terminalSearchInput = document.getElementById('terminal-search-input');
+const terminalSearchPrev = document.getElementById('terminal-search-prev');
+const terminalSearchNext = document.getElementById('terminal-search-next');
+const terminalSearchClose = document.getElementById('terminal-search-close');
+
+terminalSearchInput.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    runTerminalSearch(!event.shiftKey);
+    return;
+  }
+
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeTerminalSearch();
+  }
+});
+
+terminalSearchPrev.addEventListener('click', () => runTerminalSearch(false));
+terminalSearchNext.addEventListener('click', () => runTerminalSearch(true));
+terminalSearchClose.addEventListener('click', () => closeTerminalSearch());
 
 document.querySelectorAll('.agent-option').forEach((option) => {
   option.addEventListener('click', () => {

@@ -177,6 +177,49 @@
       position: relative;
     }
 
+    #terminal-search {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px;
+      z-index: 20;
+    }
+    #terminal-search.show { display: flex; }
+
+    #terminal-search-input {
+      width: 180px;
+      background: var(--bg-dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 5px 8px;
+      outline: none;
+    }
+    #terminal-search-input:focus { border-color: var(--accent); }
+
+    .terminal-search-btn {
+      min-width: 24px;
+      height: 24px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg-tab);
+      color: var(--text-dim);
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0 6px;
+    }
+    .terminal-search-btn:hover {
+      color: var(--text);
+      border-color: var(--accent);
+    }
+
     .terminal-wrapper {
       position: absolute;
       inset: 0;
@@ -351,6 +394,13 @@
 
     <!-- 终端容器 -->
     <div id="terminal-container">
+      <div id="terminal-search">
+        <input id="terminal-search-input" type="text" placeholder="Search terminal..." />
+        <button class="terminal-search-btn" id="terminal-search-prev" title="Previous (Shift+Enter)">↑</button>
+        <button class="terminal-search-btn" id="terminal-search-next" title="Next (Enter)">↓</button>
+        <button class="terminal-search-btn" id="terminal-search-close" title="Close (Esc)">✕</button>
+      </div>
+
       <!-- Chat 面板 (OpenClaw) -->
       <div id="chat-panel" class="active">
         <div id="chat-messages">
@@ -388,6 +438,7 @@
 
   <script src="./node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="./node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="./node_modules/@xterm/addon-search/lib/addon-search.js"></script>
   <script src="./node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
   <script src="./node_modules/marked/lib/marked.umd.js"></script>
   <script src="./renderer.js"></script>
