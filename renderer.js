@@ -132,7 +132,9 @@ async function addAgentTab(type) {
   });
 
   const fitAddon = new FitAddon.FitAddon();
+  const webLinksAddon = new WebLinksAddon.WebLinksAddon();
   term.loadAddon(fitAddon);
+  term.loadAddon(webLinksAddon);
   term.open(wrapper);
 
   setTimeout(() => fitAddon.fit(), 100);
