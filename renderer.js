@@ -379,7 +379,11 @@ function appendMessage(text, cls) {
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = `message ${cls}`;
-  div.textContent = text;
+  if (cls === 'from-bot' && window.marked?.parse) {
+    div.innerHTML = window.marked.parse(text);
+  } else {
+    div.textContent = text;
+  }
   container.appendChild(div);
   container.scrollTop = container.scrollHeight;
 }

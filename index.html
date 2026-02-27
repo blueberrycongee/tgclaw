@@ -218,6 +218,28 @@
       margin-right: auto;
       border-bottom-left-radius: 4px;
     }
+    .message.from-bot > :first-child { margin-top: 0; }
+    .message.from-bot > :last-child { margin-bottom: 0; }
+    .message.from-bot a { color: var(--accent); }
+    .message.from-bot code {
+      font-family: Menlo, Monaco, "Courier New", monospace;
+      background: rgba(255,255,255,0.08);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+    .message.from-bot pre {
+      background: rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow-x: auto;
+      padding: 8px;
+      margin: 8px 0;
+    }
+    .message.from-bot pre code {
+      background: transparent;
+      padding: 0;
+      border-radius: 0;
+    }
 
     #chat-input-bar {
       display: flex;
@@ -367,6 +389,7 @@
   <script src="./node_modules/@xterm/xterm/lib/xterm.js"></script>
   <script src="./node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
   <script src="./node_modules/@xterm/addon-web-links/lib/addon-web-links.js"></script>
+  <script src="./node_modules/marked/lib/marked.umd.js"></script>
   <script src="./renderer.js"></script>
 </body>
 </html>
