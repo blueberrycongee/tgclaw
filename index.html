@@ -282,7 +282,17 @@
       transition: background 0.15s;
     }
     .agent-option:hover { background: rgba(255,255,255,0.05); }
+    .agent-option.pick-feedback {
+      animation: agent-pick-feedback 0.18s ease;
+      background: rgba(94,181,247,0.2);
+    }
     .agent-option .emoji { font-size: 20px; }
+
+    @keyframes agent-pick-feedback {
+      0% { transform: scale(1); }
+      40% { transform: scale(0.97); }
+      100% { transform: scale(1); }
+    }
   </style>
 </head>
 <body>
@@ -333,19 +343,19 @@
   <div class="agent-picker" id="agent-picker">
     <div class="agent-picker-inner">
       <h3>Launch Agent</h3>
-      <div class="agent-option" onclick="addAgentTab('claude-code')">
+      <div class="agent-option" data-agent-type="claude-code">
         <span class="emoji">🟠</span> Claude Code
       </div>
-      <div class="agent-option" onclick="addAgentTab('codex')">
+      <div class="agent-option" data-agent-type="codex">
         <span class="emoji">🟢</span> Codex
       </div>
-      <div class="agent-option" onclick="addAgentTab('goose')">
+      <div class="agent-option" data-agent-type="goose">
         <span class="emoji">🦆</span> Goose
       </div>
-      <div class="agent-option" onclick="addAgentTab('aider')">
+      <div class="agent-option" data-agent-type="aider">
         <span class="emoji">🔵</span> Aider
       </div>
-      <div class="agent-option" onclick="addAgentTab('shell')">
+      <div class="agent-option" data-agent-type="shell">
         <span class="emoji">⬛</span> Shell
       </div>
     </div>

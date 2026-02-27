@@ -3,6 +3,7 @@ let currentItem = 'openclaw';
 let projects = [];
 let tabs = {};       // projectId -> [{ id, type, termId, term, cleanup }]
 let activeTab = {};  // projectId -> tabId
+let agentPickerSelectionLocked = false;
 
 // ── Sidebar ──
 function selectItem(id) {
@@ -237,15 +238,41 @@ function hideAllTerminals() {
 
 // ── Agent picker ──
 function showAgentPicker() {
+  agentPickerSelectionLocked = false;
   document.getElementById('agent-picker').classList.add('show');
 }
 
 function hideAgentPicker() {
+  agentPickerSelectionLocked = false;
   document.getElementById('agent-picker').classList.remove('show');
 }
 
 document.getElementById('agent-picker').addEventListener('click', (e) => {
   if (e.target.id === 'agent-picker') hideAgentPicker();
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+
+  const picker = document.getElementById('agent-picker');
+  if (picker.classList.contains('show')) {
+    hideAgentPicker();
+  }
+});
+
+document.querySelectorAll('.agent-option').forEach((option) => {
+  option.addEventListener('click', () => {
+    const type = option.dataset.agentType;
+    if (!type || agentPickerSelectionLocked) return;
+
+    agentPickerSelectionLocked = true;
+    option.classList.add('pick-feedback');
+
+    setTimeout(() => {
+      option.classList.remove('pick-feedback');
+      addAgentTab(type);
+    }, 180);
+  });
 });
 
 document.getElementById('project-list').addEventListener('contextmenu', (event) => {
