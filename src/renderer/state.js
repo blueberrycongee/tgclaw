@@ -7,5 +7,6 @@ export const state = {
   dragProjectState: { projectId: null },
   tabRenameState: { projectId: null, tabId: null },
   terminalSearchVisible: false,
+  terminalTheme: 'dark',
   unreadCount: 0,
 };
