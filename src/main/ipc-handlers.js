@@ -70,6 +70,7 @@ function registerIpcHandlers(ipcMain) {
       { label: 'Restart', click: () => event.sender.send('tab:restart', { projectId, tabId, tabType }) },
       { type: 'separator' },
       { label: 'Copy Tab Name', click: () => event.sender.send('tab:copy-name', { projectId, tabId, tabName }) },
+      { label: 'Export Log', click: () => event.sender.send('tab:export-log', { projectId, tabId }) },
     ]), event);
   });
 
