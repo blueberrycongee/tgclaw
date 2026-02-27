@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('tgclaw', {
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
+  openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   writePty: (id, data) => ipcRenderer.send('pty:write', { id, data }),
   resizePty: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
   killPty: (id) => ipcRenderer.send('pty:kill', { id }),
