@@ -28,6 +28,12 @@ contextBridge.exposeInMainWorld('tgclaw', {
     ipcRenderer.on(channel, listener);
     return () => ipcRenderer.removeListener(channel, listener);
   },
+  onProjectRename: (callback) => {
+    const channel = 'project:rename';
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   onAppShortcut: (callback) => {
     const channel = 'app:shortcut';
     const listener = (event, payload) => callback(payload);

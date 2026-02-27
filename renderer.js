@@ -497,6 +497,21 @@ window.tgclaw.onProjectDelete(({ projectId }) => {
   deleteProject(projectId);
 });
 
+window.tgclaw.onProjectRename(async ({ projectId }) => {
+  const project = projects.find((p) => p.id === projectId);
+  if (!project) return;
+
+  const input = prompt('Rename project:', project.name);
+  if (input === null) return;
+
+  const nextName = input.trim();
+  if (!nextName || nextName === project.name) return;
+
+  project.name = nextName;
+  await persistProjects();
+  renderProjects();
+});
+
 window.tgclaw.onAppShortcut(({ action, index }) => {
   if (action === 'new-shell-tab') {
     createShellTabFromShortcut();

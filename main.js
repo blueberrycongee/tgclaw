@@ -151,6 +151,13 @@ ipcMain.on('project:show-context-menu', (event, { projectId }) => {
 
   const menu = Menu.buildFromTemplate([
     {
+      label: 'Rename Project',
+      click: () => {
+        event.sender.send('project:rename', { projectId });
+      },
+    },
+    { type: 'separator' },
+    {
       label: 'Delete Project',
       click: () => {
         event.sender.send('project:delete', { projectId });
