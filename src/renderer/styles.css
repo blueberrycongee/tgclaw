@@ -432,7 +432,6 @@ body {
 #gateway-connection-status.connected { color: #3bd671; }
 #gateway-connection-status.connecting { color: var(--accent); }
 #gateway-connection-status.disconnected { color: var(--text-dim); }
-}
 
 #chat-messages {
   flex: 1;
