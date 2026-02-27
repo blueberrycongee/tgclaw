@@ -121,7 +121,9 @@ export function closeTab(projectId, tabId) {
   const index = projectTabs.findIndex((tab) => tab.id === tabId);
   if (index === -1) return;
   if (isTabRenaming(projectId, tabId)) state.tabRenameState = { projectId: null, tabId: null };
-  projectTabs[index].cleanup();
+  const tab = projectTabs[index];
+  if (tab.splitTerminal?.cleanup) tab.splitTerminal.cleanup();
+  tab.cleanup();
   projectTabs.splice(index, 1);
   if (state.activeTab[projectId] === tabId) state.activeTab[projectId] = projectTabs.length > 0 ? projectTabs[projectTabs.length - 1].id : null;
   renderTabs(projectId);
