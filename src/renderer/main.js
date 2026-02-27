@@ -20,6 +20,7 @@ import {
   renderTabs,
 } from './tabs.js';
 import { configureChat, initChat } from './chat.js';
+import { initSettings } from './settings.js';
 import { configureShortcuts, initShortcutBindings } from './shortcuts.js';
 import {
   bindTerminalSearchEvents,
@@ -100,6 +101,7 @@ initAgentPicker();
 initShortcutBindings();
 bindTerminalSearchEvents();
 initChat();
+void initSettings();
 bindGlobalEvents();
 
 void initProjects();

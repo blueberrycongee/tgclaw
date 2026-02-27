@@ -49,9 +49,12 @@
       <div id="chat-panel" class="active">
         <div id="chat-header">
           <div class="chat-header-title">OpenClaw</div>
-          <div class="chat-header-status">
-            <span class="status-dot"></span>
-            <span>Online</span>
+          <div class="chat-header-right">
+            <div class="chat-header-status">
+              <span class="status-dot" id="chat-status-dot"></span>
+              <span id="chat-status-text">Offline</span>
+            </div>
+            <button id="gateway-settings-btn" class="chat-header-btn" title="Gateway Settings">⚙️</button>
           </div>
         </div>
         <div id="chat-messages">
@@ -83,6 +86,31 @@
       </div>
       <div class="agent-option" data-agent-type="shell">
         <span class="emoji">⬛</span> Shell
+      </div>
+    </div>
+  </div>
+
+  <div class="gateway-settings" id="gateway-settings">
+    <div class="gateway-settings-inner">
+      <div class="gateway-settings-header">
+        <h3>Gateway Settings</h3>
+        <button id="gateway-settings-close" class="gateway-close-btn" title="Close">✕</button>
+      </div>
+      <label class="gateway-field" for="gateway-url">
+        Gateway URL
+        <input id="gateway-url" type="text" value="ws://localhost:18789" />
+      </label>
+      <label class="gateway-field" for="gateway-token">
+        Token
+        <input id="gateway-token" type="password" />
+      </label>
+      <div class="gateway-actions">
+        <button id="gateway-connect">Connect</button>
+        <button id="gateway-disconnect">Disconnect</button>
+      </div>
+      <div class="gateway-status-row">
+        Status:
+        <span id="gateway-connection-status">Disconnected</span>
       </div>
     </div>
   </div>
