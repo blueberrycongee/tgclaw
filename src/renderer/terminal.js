@@ -111,6 +111,13 @@ export function applyTerminalTheme(theme) {
   });
 }
 
+export async function exportTerminalLog(tab) {
+  if (!tab || typeof tab.getOutput !== 'function') return false;
+  const raw = tab.getOutput();
+  const text = raw.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+  return window.tgclaw.saveTerminalLog(text);
+}
+
 export async function createTerminal({ tabId, type, project, onExit }) {
   const wrapper = document.createElement('div');
   wrapper.className = 'terminal-wrapper active';
@@ -152,8 +159,12 @@ export async function createTerminal({ tabId, type, project, onExit }) {
 
   let cleanupData = () => {};
   let cleanupExit = () => {};
+  const outputBuffer = [];
   if (!spawnError) {
-    cleanupData = window.tgclaw.onPtyData(termId, (data) => term.write(data));
+    cleanupData = window.tgclaw.onPtyData(termId, (data) => {
+      outputBuffer.push(data);
+      term.write(data);
+    });
     cleanupExit = window.tgclaw.onPtyExit(termId, (code) => {
       term.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
       window.tgclaw.notifyProcessExit({ agentType: type, projectName: project.name, exitCode: code });
@@ -173,6 +184,7 @@ export async function createTerminal({ tabId, type, project, onExit }) {
     searchAddon,
     exited: Boolean(spawnError),
     wrapperEl: wrapper,
+    getOutput: () => outputBuffer.join(''),
     cleanup: () => {
       cleanupData();
       cleanupExit();
