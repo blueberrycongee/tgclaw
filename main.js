@@ -100,13 +100,19 @@ ipcMain.handle('agent:spawn', (event, { type, cwd, cols, rows }) => {
 
   const agent = cmds[type] || { cmd: type, args: [] };
 
-  const ptyProcess = pty.spawn(agent.cmd, agent.args, {
-    name: 'xterm-256color',
-    cols: cols || 80,
-    rows: rows || 24,
-    cwd: cwd || process.env.HOME,
-    env: { ...process.env, TERM: 'xterm-256color' },
-  });
+  let ptyProcess;
+  try {
+    ptyProcess = pty.spawn(agent.cmd, agent.args, {
+      name: 'xterm-256color',
+      cols: cols || 80,
+      rows: rows || 24,
+      cwd: cwd || process.env.HOME,
+      env: { ...process.env, TERM: 'xterm-256color' },
+    });
+  } catch (error) {
+    const message = error && error.message ? error.message : String(error);
+    return { error: `Failed to spawn "${agent.cmd}": ${message}` };
+  }
 
   terminals[id] = ptyProcess;
 
