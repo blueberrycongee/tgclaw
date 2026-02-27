@@ -23,6 +23,18 @@ body {
   -webkit-app-region: drag;
 }
 
+body.light-theme {
+  --bg-dark: #f5f5f5;
+  --bg-sidebar: #e8e8e8;
+  --bg-panel: #ffffff;
+  --bg-tab: #eeeeee;
+  --bg-tab-active: #d0e4f7;
+  --text: #1a1a1a;
+  --text-dim: #666666;
+  --accent: #0066cc;
+  --border: #cccccc;
+}
+
 /* 左侧栏 */
 #sidebar {
   width: var(--sidebar-w);
