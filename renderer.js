@@ -58,17 +58,21 @@ async function addProject() {
 function renderProjects() {
   const list = document.getElementById('project-list');
   list.innerHTML = projects
-    .map(
-      (p) => `
+    .map((p) => {
+      const activeCount = (tabs[p.id] || []).filter((tab) => !tab.exited).length;
+      return `
     <div class="sidebar-item ${currentItem === p.id ? 'active' : ''}" data-id="${p.id}" data-project-id="${p.id}" onclick="selectItem('${p.id}')">
       <div class="icon">📁</div>
       <div class="item-info">
-        <div class="item-name">${escapeHtml(p.name)}</div>
+        <div class="item-name-row">
+          <div class="item-name">${escapeHtml(p.name)}</div>
+          ${activeCount > 0 ? `<span class="item-badge">${activeCount}</span>` : ''}
+        </div>
         <div class="item-status">${escapeHtml(p.cwd)}</div>
       </div>
     </div>
   `
-    )
+    })
     .join('');
 }
 
@@ -261,6 +265,7 @@ async function addAgentTab(type) {
     term.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
     if (!tabObj) return;
     tabObj.exited = true;
+    renderProjects();
     if (currentItem === project.id) {
       renderTabs(project.id);
     }
@@ -295,6 +300,7 @@ async function addAgentTab(type) {
   tabs[project.id].push(tabObj);
   activeTab[project.id] = tabId;
   renderTabs(project.id);
+  renderProjects();
 
   setTimeout(() => fitAddon.fit(), 150);
 }
@@ -312,6 +318,7 @@ function closeTab(projectId, tabId) {
   }
 
   renderTabs(projectId);
+  renderProjects();
 }
 
 function createShellTabFromShortcut() {

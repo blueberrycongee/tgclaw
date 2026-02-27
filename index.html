@@ -81,7 +81,31 @@
     .sidebar-item:not(.pinned) .icon { background: var(--bg-tab); }
 
     .item-info { overflow: hidden; }
-    .item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-name-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+    .item-name {
+      flex: 1;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .item-badge {
+      background: var(--accent);
+      color: white;
+      font-size: 10px;
+      min-width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 16px;
+      padding: 0 4px;
+      flex-shrink: 0;
+    }
     .item-status { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
 
     #add-project {
