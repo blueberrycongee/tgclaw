@@ -27,11 +27,10 @@ import {
   bindTerminalSearchEvents,
   closeTerminalSearch,
   configureTerminal,
-  exportTerminalLog,
   hideAllTerminals,
   openTerminalSearch,
-  splitTerminal,
 } from './terminal.js';
+import { exportTerminalLog, splitTerminal } from './split.js';
 import { updateWindowTitle } from './title.js';
 
 configureTerminal({ getActiveProjectTab });
