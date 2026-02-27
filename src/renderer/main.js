@@ -1,3 +1,11 @@
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { SearchAddon } from '@xterm/addon-search';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import { marked } from 'marked';
+import '@xterm/xterm/css/xterm.css';
+import './styles.css';
+
 // ── State ──
 let currentItem = 'openclaw';
 let projects = [];
@@ -391,9 +399,9 @@ async function addAgentTab(type) {
     allowProposedApi: true,
   });
 
-  const fitAddon = new FitAddon.FitAddon();
-  const searchAddon = new SearchAddon.SearchAddon();
-  const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+  const fitAddon = new FitAddon();
+  const searchAddon = new SearchAddon();
+  const webLinksAddon = new WebLinksAddon();
   term.loadAddon(fitAddon);
   term.loadAddon(searchAddon);
   term.loadAddon(webLinksAddon);
@@ -802,8 +810,8 @@ function appendMessage(text, cls) {
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = `message ${cls}`;
-  if (cls === 'from-bot' && window.marked?.parse) {
-    div.innerHTML = window.marked.parse(text);
+  if (cls === 'from-bot' && marked?.parse) {
+    div.innerHTML = marked.parse(text);
   } else {
     div.textContent = text;
   }
@@ -898,5 +906,26 @@ async function initProjects() {
   updateOpenClawBadge();
   updateWindowTitle();
 }
+
+Object.assign(window, {
+  addProject,
+  closeTab,
+  finishTabRename,
+  onProjectDragEnd,
+  onProjectDragOver,
+  onProjectDragStart,
+  onProjectDrop,
+  onTabContextMenu,
+  onTabDragEnd,
+  onTabDragOver,
+  onTabDragStart,
+  onTabDrop,
+  onTabRenameKeydown,
+  onTabTitleDoubleClick,
+  selectItem,
+  sendChat,
+  showAgentPicker,
+  switchTab,
+});
 
 void initProjects();

@@ -6,14 +6,18 @@
   "scripts": {
     "test": "echo \"No tests configured\" && exit 0",
     "start": "electron .",
-    "dev": "electron ."
+    "dev:renderer": "vite -c vite.config.js",
+    "dev:electron": "sleep 2 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "dev": "concurrently \"npm:dev:renderer\" \"npm:dev:electron\""
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "electron": "^40.6.1"
+    "concurrently": "^9.2.1",
+    "electron": "^40.6.1",
+    "vite": "^7.3.1"
   },
   "dependencies": {
     "@xterm/addon-fit": "^0.11.0",
