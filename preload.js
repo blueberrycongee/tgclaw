@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('tgclaw', {
   openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   showProjectContextMenu: (projectId) => ipcRenderer.send('project:show-context-menu', { projectId }),
   showTabContextMenu: (payload) => ipcRenderer.send('tab:show-context-menu', payload),
+  setWindowTitle: (title) => ipcRenderer.send('app:set-title', { title }),
   notifyProcessExit: ({ agentType, projectName, exitCode }) => ipcRenderer.send('notify:process-exit', {
     agentType,
     projectName,

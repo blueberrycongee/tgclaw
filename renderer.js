@@ -43,6 +43,8 @@ function selectItem(id) {
     document.getElementById('chat-panel').classList.remove('active');
     renderTabs(id);
   }
+
+  updateWindowTitle();
 }
 
 async function addProject() {
@@ -199,6 +201,7 @@ function finishTabRename(projectId, tabId, inputValue) {
 
   tabRenameState = { projectId: null, tabId: null };
   renderTabs(projectId);
+  updateWindowTitle();
 }
 
 function onTabRenameKeydown(event, projectId, tabId) {
@@ -281,6 +284,7 @@ function renderTabs(projectId) {
 function switchTab(projectId, tabId) {
   activeTab[projectId] = tabId;
   renderTabs(projectId);
+  updateWindowTitle();
 
   // Fit terminal
   const tab = (tabs[projectId] || []).find((t) => t.id === tabId);
@@ -485,6 +489,7 @@ async function addAgentTab(type) {
   activeTab[project.id] = tabId;
   renderTabs(project.id);
   renderProjects();
+  updateWindowTitle();
 
   setTimeout(() => fitAddon.fit(), 150);
 }
@@ -507,6 +512,7 @@ function closeTab(projectId, tabId) {
 
   renderTabs(projectId);
   renderProjects();
+  updateWindowTitle();
 }
 
 function createShellTabFromShortcut() {
@@ -836,6 +842,20 @@ function updateOpenClawBadge() {
   badge.style.display = 'none';
 }
 
+function updateWindowTitle() {
+  let title = 'TGClaw — OpenClaw';
+
+  if (currentItem !== 'openclaw') {
+    const project = projects.find((item) => item.id === currentItem);
+    const active = getActiveProjectTab(currentItem);
+    const projectName = project ? project.name : 'Unknown Project';
+    const tabName = active ? getTabDisplayName(active) : 'No Tab';
+    title = `TGClaw — ${projectName} — ${tabName}`;
+  }
+
+  window.tgclaw.setWindowTitle(title);
+}
+
 async function copyTextToClipboard(text) {
   const value = String(text || '');
   if (!value) return;
@@ -876,6 +896,7 @@ async function initProjects() {
     : [];
   renderProjects();
   updateOpenClawBadge();
+  updateWindowTitle();
 }
 
 void initProjects();

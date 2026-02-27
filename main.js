@@ -224,6 +224,14 @@ ipcMain.on('notify:process-exit', (event, payload) => {
   notification.show();
 });
 
+ipcMain.on('app:set-title', (event, payload) => {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || window.isDestroyed()) return;
+
+  const title = payload && typeof payload.title === 'string' ? payload.title : 'TGClaw';
+  window.setTitle(title || 'TGClaw');
+});
+
 ipcMain.on('pty:write', (event, { id, data }) => {
   if (terminals[id]) terminals[id].write(data);
 });
