@@ -225,6 +225,22 @@ body {
 }
 #add-tab:hover { background: rgba(255,255,255,0.05); color: var(--text); }
 
+.theme-toggle-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-tab);
+  color: var(--text);
+  border-radius: 8px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  -webkit-app-region: no-drag;
+}
+.theme-toggle-btn:hover { border-color: var(--accent); }
+
 /* 终端容器 */
 #terminal-container {
   flex: 1;
