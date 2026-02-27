@@ -5,6 +5,7 @@ let tabs = {};       // projectId -> [{ id, type, termId, term, exited, cleanup 
 let activeTab = {};  // projectId -> tabId
 let agentPickerSelectionLocked = false;
 let dragTabState = { projectId: null, tabId: null };
+let dragProjectState = { projectId: null };
 let tabRenameState = { projectId: null, tabId: null };
 let terminalSearchVisible = false;
 
@@ -62,7 +63,17 @@ function renderProjects() {
     .map((p) => {
       const activeCount = (tabs[p.id] || []).filter((tab) => !tab.exited).length;
       return `
-    <div class="sidebar-item ${currentItem === p.id ? 'active' : ''}" data-id="${p.id}" data-project-id="${p.id}" onclick="selectItem('${p.id}')">
+    <div
+      class="sidebar-item ${currentItem === p.id ? 'active' : ''}"
+      data-id="${p.id}"
+      data-project-id="${p.id}"
+      draggable="true"
+      onclick="selectItem('${p.id}')"
+      ondragstart="onProjectDragStart(event, '${p.id}')"
+      ondragover="onProjectDragOver(event, '${p.id}')"
+      ondrop="onProjectDrop(event, '${p.id}')"
+      ondragend="onProjectDragEnd()"
+    >
       <div class="icon">📁</div>
       <div class="item-info">
         <div class="item-name-row">
@@ -94,6 +105,69 @@ function deleteProject(projectId) {
   }
 
   renderProjects();
+}
+
+function clearProjectDropIndicators() {
+  document.querySelectorAll('.sidebar-item[data-project-id]').forEach((itemEl) => {
+    itemEl.classList.remove('drag-over-before', 'drag-over-after');
+  });
+}
+
+function onProjectDragStart(event, projectId) {
+  dragProjectState = { projectId };
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', projectId);
+  event.currentTarget.classList.add('dragging');
+}
+
+function onProjectDragOver(event, targetProjectId) {
+  if (!dragProjectState.projectId || dragProjectState.projectId === targetProjectId) return;
+
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+
+  clearProjectDropIndicators();
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const dropAfter = event.clientY > rect.top + rect.height / 2;
+  event.currentTarget.classList.add(dropAfter ? 'drag-over-after' : 'drag-over-before');
+}
+
+async function onProjectDrop(event, targetProjectId) {
+  event.preventDefault();
+
+  const sourceProjectId = dragProjectState.projectId;
+  if (!sourceProjectId || sourceProjectId === targetProjectId) {
+    onProjectDragEnd();
+    return;
+  }
+
+  const sourceIndex = projects.findIndex((project) => project.id === sourceProjectId);
+  const targetIndex = projects.findIndex((project) => project.id === targetProjectId);
+  if (sourceIndex === -1 || targetIndex === -1) {
+    onProjectDragEnd();
+    return;
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect();
+  const dropAfter = event.clientY > rect.top + rect.height / 2;
+  let nextIndex = targetIndex + (dropAfter ? 1 : 0);
+  if (sourceIndex < nextIndex) nextIndex -= 1;
+
+  const [movedProject] = projects.splice(sourceIndex, 1);
+  projects.splice(nextIndex, 0, movedProject);
+
+  onProjectDragEnd();
+  renderProjects();
+  await persistProjects();
+}
+
+function onProjectDragEnd() {
+  dragProjectState = { projectId: null };
+  document.querySelectorAll('.sidebar-item[data-project-id]').forEach((itemEl) => {
+    itemEl.classList.remove('dragging');
+  });
+  clearProjectDropIndicators();
 }
 
 // ── Tabs ──

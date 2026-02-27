@@ -56,6 +56,9 @@ body {
 
 .sidebar-item:hover { background: rgba(255,255,255,0.05); }
 .sidebar-item.active { background: var(--bg-tab-active); }
+.sidebar-item.dragging { opacity: 0.45; }
+.sidebar-item.drag-over-before { box-shadow: inset 0 2px 0 var(--accent); }
+.sidebar-item.drag-over-after { box-shadow: inset 0 -2px 0 var(--accent); }
 
 .sidebar-item .icon {
   width: 36px;
