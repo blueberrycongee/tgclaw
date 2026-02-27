@@ -66,6 +66,7 @@ function registerIpcHandlers(ipcMain) {
     const { projectId, tabId, tabType, tabName } = payload || {};
     if (!projectId || !tabId) return;
     popupForSender(Menu.buildFromTemplate([
+      { label: 'Split Terminal', click: () => event.sender.send('tab:split', { projectId, tabId }) },
       { label: 'Kill Process', click: () => event.sender.send('tab:kill', { projectId, tabId }) },
       { label: 'Restart', click: () => event.sender.send('tab:restart', { projectId, tabId, tabType }) },
       { type: 'separator' },
