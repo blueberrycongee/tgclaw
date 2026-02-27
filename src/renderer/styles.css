@@ -309,6 +309,21 @@ body.light-theme {
   display: none;
 }
 .terminal-wrapper.active { display: block; }
+.terminal-wrapper.has-split {
+  display: flex;
+  flex-direction: column;
+}
+.terminal-split-pane {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.split-divider {
+  height: 4px;
+  background: var(--border);
+  cursor: row-resize;
+  flex-shrink: 0;
+}
 
 /* Chat 面板 (OpenClaw) */
 #chat-panel {
