@@ -239,6 +239,26 @@ function closeTab(projectId, tabId) {
   renderTabs(projectId);
 }
 
+function createShellTabFromShortcut() {
+  if (currentItem === 'openclaw') return;
+  addAgentTab('shell');
+}
+
+function closeActiveTabFromShortcut() {
+  if (currentItem === 'openclaw') return;
+  const currentTabId = activeTab[currentItem];
+  if (!currentTabId) return;
+  closeTab(currentItem, currentTabId);
+}
+
+function switchTabByIndexFromShortcut(index) {
+  if (currentItem === 'openclaw') return;
+  const projectTabs = tabs[currentItem] || [];
+  const targetTab = projectTabs[index];
+  if (!targetTab) return;
+  switchTab(currentItem, targetTab.id);
+}
+
 function clearTabDropIndicators() {
   document.querySelectorAll('.tab').forEach((tabEl) => {
     tabEl.classList.remove('drag-over-before', 'drag-over-after');
@@ -358,6 +378,22 @@ document.getElementById('project-list').addEventListener('contextmenu', (event) 
 
 window.tgclaw.onProjectDelete(({ projectId }) => {
   deleteProject(projectId);
+});
+
+window.tgclaw.onAppShortcut(({ action, index }) => {
+  if (action === 'new-shell-tab') {
+    createShellTabFromShortcut();
+    return;
+  }
+
+  if (action === 'close-current-tab') {
+    closeActiveTabFromShortcut();
+    return;
+  }
+
+  if (action === 'switch-tab' && Number.isInteger(index)) {
+    switchTabByIndexFromShortcut(index);
+  }
 });
 
 // ── Chat (OpenClaw placeholder) ──

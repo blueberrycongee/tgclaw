@@ -5,6 +5,46 @@ const pty = require('node-pty');
 const terminals = {};
 let nextTermId = 1;
 
+function sendShortcutAction(action, payload = {}) {
+  const window = BrowserWindow.getFocusedWindow();
+  if (!window || window.isDestroyed()) return;
+  window.webContents.send('app:shortcut', { action, ...payload });
+}
+
+function setupApplicationMenu() {
+  const switchTabMenuItems = Array.from({ length: 9 }, (_, index) => ({
+    label: `Switch to Tab ${index + 1}`,
+    accelerator: `CommandOrControl+${index + 1}`,
+    click: () => sendShortcutAction('switch-tab', { index }),
+  }));
+
+  const template = [
+    ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
+    {
+      label: 'Tabs',
+      submenu: [
+        {
+          label: 'New Shell Tab',
+          accelerator: 'CommandOrControl+T',
+          click: () => sendShortcutAction('new-shell-tab'),
+        },
+        {
+          label: 'Close Current Tab',
+          accelerator: 'CommandOrControl+W',
+          click: () => sendShortcutAction('close-current-tab'),
+        },
+        { type: 'separator' },
+        ...switchTabMenuItems,
+      ],
+    },
+    { role: 'editMenu' },
+    { role: 'viewMenu' },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
 function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
@@ -127,7 +167,10 @@ ipcMain.on('pty:kill', (event, { id }) => {
   }
 });
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  setupApplicationMenu();
+  createWindow();
+});
 
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
