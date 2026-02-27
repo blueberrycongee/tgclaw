@@ -173,6 +173,9 @@ class GatewayClient {
   chatHistory(sessionKey, limit) {
     return this.send('chat.history', { sessionKey, limit });
   }
+  chatAbort(sessionKey, runId) {
+    return this.send('chat.abort', { sessionKey, runId });
+  }
   sessionsList() {
     return this.send('sessions.list', {});
   }
