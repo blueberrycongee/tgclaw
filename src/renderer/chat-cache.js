@@ -2,7 +2,6 @@ const CACHE_VERSION = 1;
 const MAX_SESSIONS = 200;
 const MAX_MESSAGES_PER_SESSION = 500;
 const SAVE_DEBOUNCE_MS = 150;
-
 function emptyCache() {
   return {
     version: CACHE_VERSION,
@@ -15,18 +14,15 @@ let cache = emptyCache();
 let loaded = false;
 let loadPromise = null;
 let saveTimer = null;
-
 function normalizeSessionKey(sessionKey) {
   return typeof sessionKey === 'string' && sessionKey.trim() ? sessionKey.trim() : 'default';
 }
-
 function normalizeTimestamp(value) {
   const date = new Date(value);
   const timestamp = date.getTime();
   if (Number.isFinite(timestamp)) return timestamp;
   return Date.now();
 }
-
 function normalizeSession(session) {
   if (!session || typeof session !== 'object') return null;
   const sessionKey = normalizeSessionKey(session.sessionKey);
@@ -35,12 +31,10 @@ function normalizeSession(session) {
   const updatedAt = normalizeTimestamp(session.updatedAt ?? session.createdAt ?? Date.now());
   return { sessionKey, label, updatedAt };
 }
-
 function normalizeRole(role) {
   if (role === 'assistant' || role === 'bot') return 'assistant';
   return 'user';
 }
-
 function normalizeMessage(message) {
   if (!message || typeof message !== 'object') return null;
   const content = typeof message.content === 'string' ? message.content : '';
@@ -52,7 +46,6 @@ function normalizeMessage(message) {
     : `${role}-${createdAt}-${Math.random().toString(16).slice(2, 8)}`;
   return { id, role, content, createdAt };
 }
-
 function compactConsecutiveDuplicates(messages) {
   const compacted = [];
   messages.forEach((message) => {
@@ -62,14 +55,12 @@ function compactConsecutiveDuplicates(messages) {
   });
   return compacted;
 }
-
 function normalizeMessages(messages) {
   const normalized = Array.isArray(messages) ? messages.map(normalizeMessage).filter(Boolean) : [];
   const sorted = normalized.sort((left, right) => left.createdAt - right.createdAt);
   const compacted = compactConsecutiveDuplicates(sorted);
   return compacted.slice(-MAX_MESSAGES_PER_SESSION);
 }
-
 function normalizeMessagesBySession(messagesBySession) {
   if (!messagesBySession || typeof messagesBySession !== 'object') return {};
   const normalized = {};
@@ -79,7 +70,6 @@ function normalizeMessagesBySession(messagesBySession) {
   });
   return normalized;
 }
-
 function normalizeCache(rawCache) {
   const sessions = Array.isArray(rawCache?.sessions)
     ? rawCache.sessions.map(normalizeSession).filter(Boolean)
@@ -98,7 +88,6 @@ function normalizeCache(rawCache) {
     messagesBySession: normalizeMessagesBySession(rawCache?.messagesBySession),
   };
 }
-
 async function persistCache() {
   if (typeof window?.tgclaw?.saveChatCache !== 'function') return;
   try {
@@ -107,7 +96,6 @@ async function persistCache() {
     // Ignore persistence failures and keep in-memory cache available.
   }
 }
-
 function schedulePersist() {
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -115,7 +103,6 @@ function schedulePersist() {
     void persistCache();
   }, SAVE_DEBOUNCE_MS);
 }
-
 function touchSession(sessionKey, label = '') {
   if (sessionKey === 'default') return;
   const normalized = normalizeSession({ sessionKey, label, updatedAt: Date.now() });
@@ -126,7 +113,6 @@ function touchSession(sessionKey, label = '') {
   cache.sessions.sort((left, right) => right.updatedAt - left.updatedAt);
   cache.sessions = cache.sessions.slice(0, MAX_SESSIONS);
 }
-
 export async function ensureChatCacheLoaded() {
   if (loaded) return cache;
   if (loadPromise) return loadPromise;
@@ -150,11 +136,9 @@ export async function ensureChatCacheLoaded() {
 
   return loadPromise;
 }
-
 export function getCachedSessions() {
   return cache.sessions.map((session) => ({ ...session }));
 }
-
 export function setCachedSessions(nextSessions) {
   const normalized = Array.isArray(nextSessions) ? nextSessions.map(normalizeSession).filter(Boolean) : [];
   const deduped = [];
@@ -168,14 +152,12 @@ export function setCachedSessions(nextSessions) {
   cache.sessions = deduped.slice(0, MAX_SESSIONS);
   schedulePersist();
 }
-
 export function upsertCachedSession(session) {
   const normalized = normalizeSession(session);
   if (!normalized) return;
   touchSession(normalized.sessionKey, normalized.label);
   schedulePersist();
 }
-
 export function removeCachedSession(sessionKey, options = {}) {
   const key = normalizeSessionKey(sessionKey);
   if (key === 'default') return;
@@ -183,13 +165,11 @@ export function removeCachedSession(sessionKey, options = {}) {
   if (options.keepMessages !== true) delete cache.messagesBySession[key];
   schedulePersist();
 }
-
 export function getCachedMessages(sessionKey) {
   const key = normalizeSessionKey(sessionKey);
   const messages = cache.messagesBySession[key] || [];
   return messages.map((message) => ({ ...message }));
 }
-
 export function setCachedMessages(sessionKey, messages, options = {}) {
   const key = normalizeSessionKey(sessionKey);
   cache.messagesBySession[key] = normalizeMessages(messages);
@@ -197,7 +177,6 @@ export function setCachedMessages(sessionKey, messages, options = {}) {
   schedulePersist();
   return getCachedMessages(key);
 }
-
 export function appendCachedMessage(sessionKey, message, options = {}) {
   const key = normalizeSessionKey(sessionKey);
   const normalized = normalizeMessage(message);

@@ -1,10 +1,8 @@
 import { buildDeviceAuthSignature, randomId } from './gateway-identity.js';
-const PROTOCOL_VERSION = 3;
-const CLIENT_ID = 'tgclaw';
+const PROTOCOL_VERSION = 3, CLIENT_ID = 'tgclaw';
 const CLIENT_MODE = 'cli';
 const CLIENT_VERSION = '1.0.0';
-const CLIENT_PLATFORM = 'electron';
-const CLIENT_DEVICE_FAMILY = 'desktop';
+const CLIENT_PLATFORM = 'electron', CLIENT_DEVICE_FAMILY = 'desktop';
 const DEFAULT_ROLE = 'node';
 const DEFAULT_SCOPES = ['operator.admin', 'operator.read', 'operator.write'];
 const DEFAULT_NODE_COMMANDS = ['system.run'];
