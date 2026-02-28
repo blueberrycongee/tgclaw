@@ -76,23 +76,27 @@ export function appendMessage(text, cls, options = {}) {
   const isBotMessage = classList.includes('from-bot');
   if (isBotMessage) markBotUnread();
   const container = document.getElementById('chat-messages');
+  const row = document.createElement('div');
+  row.className = 'message-row';
+  row.classList.add(classList.includes('from-user') ? 'from-user' : 'from-bot');
   const div = document.createElement('div');
   div.className = `message ${cls}`;
   if (isBotMessage) renderBotMessage(div, text);
   else div.textContent = text;
   const time = document.createElement('span');
   time.className = 'message-time';
-  const createdAt = Number.isFinite(new Date(options.createdAt).getTime())
-    ? new Date(options.createdAt)
-    : new Date();
+  const createdAtTimestamp = new Date(options.createdAt).getTime();
+  const createdAt = Number.isFinite(createdAtTimestamp) ? new Date(createdAtTimestamp) : new Date();
+  time.dateTime = createdAt.toISOString();
   time.textContent = createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  div.appendChild(time);
+  row.appendChild(div);
+  row.appendChild(time);
   if (isBotMessage) addCodeBlockCopyButtons(div);
-  container.appendChild(div);
-  animateMessageEntry(div, animate);
+  container.appendChild(row);
+  animateMessageEntry(row, animate);
   scrollChatToBottom();
   updateEmptyState();
-  return div;
+  return row;
 }
 
 function extractCodeLanguage(codeElement) {
@@ -147,16 +151,21 @@ export function addCodeBlockCopyButtons(container) {
 export function createStreamMessage() {
   markBotUnread();
   const container = document.getElementById('chat-messages');
+  const row = document.createElement('div');
+  row.className = 'message-row from-bot';
   const div = document.createElement('div');
   div.className = 'message from-bot';
   const content = document.createElement('div');
   div.appendChild(content);
   const time = document.createElement('span');
   time.className = 'message-time';
-  time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  div.appendChild(time);
-  container.appendChild(div);
-  animateMessageEntry(div);
+  const createdAt = new Date();
+  time.dateTime = createdAt.toISOString();
+  time.textContent = createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  row.appendChild(div);
+  row.appendChild(time);
+  container.appendChild(row);
+  animateMessageEntry(row);
   updateEmptyState();
   scrollChatToBottom();
   return content;

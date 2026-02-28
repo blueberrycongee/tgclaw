@@ -1,0 +1,58 @@
+/* Keep message metadata (time) outside of the bubble for clearer hierarchy. */
+#chat-messages .message-row {
+  max-width: min(72%, 76ch);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--spacing-2);
+}
+
+#chat-messages .message-row.from-user {
+  margin-left: auto;
+  align-items: flex-end;
+}
+
+#chat-messages .message-row.from-bot {
+  margin-right: auto;
+  align-items: flex-start;
+}
+
+#chat-messages .message-row .message {
+  width: fit-content;
+  max-width: 100%;
+  margin-bottom: 0;
+}
+
+#chat-messages .message-row .message-time {
+  display: block;
+  margin: 0;
+  padding: 0 2px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-dim);
+  opacity: 0.72;
+}
+
+#chat-messages .message-row.from-user .message-time {
+  text-align: right;
+}
+
+#chat-messages .message-row.from-bot .message-time {
+  text-align: left;
+}
+
+#chat-messages .message-row.message-enter {
+  opacity: 0;
+  transform: translateY(2px);
+  will-change: opacity, transform;
+}
+
+#chat-messages .message-row.message-enter.message-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
+#chat-messages .message-row.typing-row {
+  gap: 0;
+}
