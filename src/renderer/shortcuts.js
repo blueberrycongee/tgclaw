@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { scrollChatToBottom, updateEmptyState } from './chat-messages.js';
 
 const deps = {
   addAgentTab: () => {},
@@ -30,6 +31,13 @@ export function switchTabByIndexFromShortcut(index) {
   deps.switchTab(state.currentItem, targetTab.id);
 }
 
+function clearChat() {
+  const container = document.getElementById('chat-messages');
+  if (container) container.innerHTML = '';
+  updateEmptyState();
+  scrollChatToBottom();
+}
+
 export function initShortcutBindings() {
   window.tgclaw.onAppShortcut(({ action, index }) => {
     if (action === 'new-shell-tab') {
@@ -44,6 +52,11 @@ export function initShortcutBindings() {
 
     if (action === 'switch-tab' && Number.isInteger(index)) {
       switchTabByIndexFromShortcut(index);
+      return;
+    }
+
+    if (action === 'clear-chat') {
+      clearChat();
     }
   });
 }
