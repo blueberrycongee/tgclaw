@@ -25,6 +25,7 @@ contextBridge.exposeInMainWorld('tgclaw', {
     projectName,
     exitCode,
   }),
+  notifyChatMessage: ({ title, body }) => ipcRenderer.send('notify:chat-message', { title, body }),
   writePty: (id, data) => ipcRenderer.send('pty:write', { id, data }),
   resizePty: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
   killPty: (id) => ipcRenderer.send('pty:kill', { id }),

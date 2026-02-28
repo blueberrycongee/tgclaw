@@ -58,6 +58,17 @@ function markBotUnread() {
     updateOpenClawBadgeRef();
   }
 }
+function notifyIncomingBotMessage(text) {
+  if (document.hasFocus()) return;
+  const body = String(text || '')
+    .replace(/```[\s\S]*?```|`[^`]*`|!\[[^\]]*]\([^)]+\)/g, ' ')
+    .replace(/\[([^\]]+)\]\([^)]+\)|[#>*_~]/g, '$1')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+  if (!body) return;
+  window.tgclaw.notifyChatMessage({ title: 'OpenClaw', body });
+}
 function renderBotMessage(div, text) {
   if (marked?.parse) div.innerHTML = marked.parse(text);
   else div.textContent = text;
@@ -241,6 +252,7 @@ function handleGatewayChat(frame) {
     } else if (finalText) {
       appendMessage(finalText, 'from-bot');
     }
+    if (finalText) notifyIncomingBotMessage(finalText);
     resetStreamingState();
     return;
   }
