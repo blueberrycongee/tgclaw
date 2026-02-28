@@ -78,11 +78,61 @@ export function appendMessage(text, cls, options = {}) {
   div.className = `message ${cls}`;
   if (cls === 'from-bot') renderBotMessage(div, text);
   else div.textContent = text;
+  if (cls === 'from-bot') addCodeBlockCopyButtons(div);
   container.appendChild(div);
   animateMessageEntry(div, animate);
   scrollChatToBottom();
   updateEmptyState();
   return div;
+}
+
+function extractCodeLanguage(codeElement) {
+  const classNames = String(codeElement?.className || '').split(/\s+/).filter(Boolean);
+  const languageClass = classNames.find((name) => name.startsWith('language-'));
+  if (!languageClass) return 'code';
+  const language = languageClass.slice('language-'.length).trim().toLowerCase();
+  return language || 'code';
+}
+
+export function addCodeBlockCopyButtons(container) {
+  if (!container) return;
+  container.querySelectorAll('pre > code').forEach((codeElement) => {
+    const preElement = codeElement.parentElement;
+    if (!preElement || preElement.parentElement?.classList.contains('code-block-wrapper')) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'code-block-wrapper';
+
+    const header = document.createElement('div');
+    header.className = 'code-block-header';
+
+    const language = document.createElement('span');
+    language.textContent = extractCodeLanguage(codeElement);
+
+    const copyButton = document.createElement('button');
+    copyButton.className = 'code-copy-btn';
+    copyButton.title = 'Copy code';
+    copyButton.type = 'button';
+    copyButton.textContent = '📋';
+    copyButton.addEventListener('click', async () => {
+      const text = codeElement.textContent || '';
+      copyButton.disabled = true;
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch {
+        // no-op
+      }
+      copyButton.textContent = '✓';
+      setTimeout(() => {
+        copyButton.textContent = '📋';
+        copyButton.disabled = false;
+      }, 1500);
+    });
+
+    header.append(language, copyButton);
+    preElement.replaceWith(wrapper);
+    wrapper.append(header, preElement);
+  });
 }
 
 export function createStreamMessage() {
