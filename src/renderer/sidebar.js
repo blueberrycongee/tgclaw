@@ -2,7 +2,7 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { updateEmptyState } from './chat-messages.js';
 import { showInputModal } from './modal.js';
-import { addProject, configureProjects, deleteProject, renameProject } from './projects.js';
+import { addProject, configureProjects, deleteProject, markProjectAsSeen, renameProject } from './projects.js';
 import { removeCachedSession, upsertCachedSession } from './chat-cache.js';
 
 const deps = {
@@ -56,6 +56,7 @@ export function selectItem(id) {
     deps.hideAllTerminals();
     if (shouldReloadHistory) deps.reloadChatHistory();
   } else {
+    markProjectAsSeen(id);
     if (tabbar) tabbar.style.display = 'flex';
     if (quickLaunchBar) quickLaunchBar.style.display = 'flex';
     if (chatPanel) chatPanel.classList.remove('active');
