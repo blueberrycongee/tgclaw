@@ -1,5 +1,7 @@
 export const state = {
   currentItem: 'openclaw',
+  sessions: [],
+  currentSessionKey: 'default',
   projects: [],
   tabs: {},
   activeTab: {},
