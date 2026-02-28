@@ -1,9 +1,10 @@
-/* Hover menu for opening a specific CLI from the add-tab button. */
-.tab-add-hover-menu {
+/* Hover menus for add-tab actions and default-agent selection. */
+.tab-add-hover-menu,
+.tab-add-default-submenu {
   position: fixed;
   display: none;
   min-width: 188px;
-  max-height: min(70vh, 420px);
+  max-height: min(72vh, 420px);
   overflow-y: auto;
   padding: var(--spacing-1);
   border: 1px solid var(--gray-300);
@@ -15,6 +16,10 @@
 }
 
 .tab-add-hover-menu.show {
+  display: block;
+}
+
+.tab-add-default-submenu.show {
   display: block;
 }
 
@@ -31,7 +36,9 @@
   flex: 0 0 auto;
 }
 
-.tab-add-option {
+.tab-add-default-anchor,
+.tab-add-option,
+.tab-add-default-option {
   width: 100%;
   height: 32px;
   display: flex;
@@ -48,29 +55,61 @@
   transition: background-color var(--duration-fast) ease-out, border-color var(--duration-fast) ease-out;
 }
 
-.tab-add-option:hover {
+.tab-add-default-anchor:hover,
+.tab-add-option:hover,
+.tab-add-default-option:hover {
   background: var(--gray-100);
   border-color: var(--gray-300);
 }
 
-.tab-add-option.pick-feedback {
+.tab-add-default-anchor {
+  cursor: pointer;
+}
+
+.tab-add-default-title {
+  color: var(--gray-600);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tab-add-default-value {
+  margin-left: auto;
+  color: var(--gray-900);
+  font-size: var(--text-sm);
+}
+
+.tab-add-default-chevron {
+  margin-left: var(--spacing-2);
+  color: var(--gray-600);
+}
+
+.tab-add-divider {
+  height: 1px;
+  margin: var(--spacing-1) 0;
+  background: var(--gray-300);
+}
+
+.tab-add-option.pick-feedback,
+.tab-add-default-option.pick-feedback {
   background: var(--gray-100);
   border-color: var(--accent);
 }
 
-.tab-add-option.is-default {
+.tab-add-default-option.is-default {
   border-color: rgba(0, 112, 243, 0.35);
   background: rgba(0, 112, 243, 0.08);
 }
 
-.tab-add-option.is-default::after {
+.tab-add-default-option.is-default::after {
   content: 'Default';
   margin-left: auto;
   color: var(--accent);
   font-size: var(--text-xs);
 }
 
-.tab-add-option-icon {
+.tab-add-option-icon,
+.tab-add-default-option-icon {
   width: 14px;
   height: 14px;
   color: var(--gray-900);
@@ -79,6 +118,7 @@
   justify-content: center;
 }
 
-.tab-add-option-label {
+.tab-add-option-label,
+.tab-add-default-option-label {
   line-height: 1;
 }
