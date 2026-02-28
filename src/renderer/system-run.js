@@ -4,6 +4,96 @@ import { addAgentTab } from './tabs.js';
 
 const activeRuns = new Map();
 
+const EXEC_APPROVALS_KEY = 'tgclaw.execApprovals.v1';
+
+function loadExecApprovals() {
+  try {
+    const raw = localStorage.getItem(EXEC_APPROVALS_KEY);
+    if (!raw) return { allowlist: [] };
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : { allowlist: [] };
+  } catch {
+    return { allowlist: [] };
+  }
+}
+
+function saveExecApprovals(file) {
+  try {
+    localStorage.setItem(EXEC_APPROVALS_KEY, JSON.stringify(file));
+  } catch {
+    // ignore
+  }
+}
+
+function hashExecApprovals(file) {
+  const str = JSON.stringify(file || {});
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
+}
+
+async function handleExecApprovalsGet(requestId, nodeId) {
+  try {
+    const file = loadExecApprovals();
+    const hash = hashExecApprovals(file);
+    await gateway.nodeInvokeResult(requestId, nodeId, true, {
+      path: 'localStorage:' + EXEC_APPROVALS_KEY,
+      exists: true,
+      hash,
+      file,
+    }, null);
+  } catch (err) {
+    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+      code: 'INTERNAL_ERROR',
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+async function handleExecApprovalsSet(requestId, nodeId, paramsJSON) {
+  try {
+    const params = typeof paramsJSON === 'string' ? JSON.parse(paramsJSON) : paramsJSON;
+    if (!params || !params.file || typeof params.file !== 'object') {
+      await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+        code: 'INVALID_REQUEST',
+        message: 'exec approvals file required',
+      });
+      return;
+    }
+
+    const currentFile = loadExecApprovals();
+    const currentHash = hashExecApprovals(currentFile);
+
+    if (params.baseHash && params.baseHash !== currentHash) {
+      await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+        code: 'CONFLICT',
+        message: `exec approvals modified (expected ${params.baseHash}, got ${currentHash})`,
+      });
+      return;
+    }
+
+    const newFile = params.file;
+    saveExecApprovals(newFile);
+    const newHash = hashExecApprovals(newFile);
+
+    await gateway.nodeInvokeResult(requestId, nodeId, true, {
+      path: 'localStorage:' + EXEC_APPROVALS_KEY,
+      exists: true,
+      hash: newHash,
+      file: newFile,
+    }, null);
+  } catch (err) {
+    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+      code: 'INTERNAL_ERROR',
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 function trimToString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
@@ -72,6 +162,16 @@ function parseCommandToArgv(command) {
 
 async function handleSystemRun(request) {
   const { id: requestId, nodeId, command, paramsJSON } = request;
+
+  if (command === 'system.execApprovals.get') {
+    await handleExecApprovalsGet(requestId, nodeId);
+    return;
+  }
+
+  if (command === 'system.execApprovals.set') {
+    await handleExecApprovalsSet(requestId, nodeId, paramsJSON);
+    return;
+  }
 
   if (command !== 'system.run') {
     await gateway.nodeInvokeResult(requestId, nodeId, false, null, {

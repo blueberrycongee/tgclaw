@@ -5,7 +5,7 @@ const CLIENT_VERSION = '1.0.0';
 const CLIENT_PLATFORM = 'electron', CLIENT_DEVICE_FAMILY = 'desktop';
 const DEFAULT_ROLE = 'node';
 const DEFAULT_SCOPES = ['operator.admin', 'operator.read', 'operator.write'];
-const DEFAULT_NODE_COMMANDS = ['system.run'];
+const DEFAULT_NODE_COMMANDS = ['system.run', 'system.execApprovals.get', 'system.execApprovals.set'];
 const RECONNECT_DELAY_MS = 5000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 function buildError(message, code, details) {
