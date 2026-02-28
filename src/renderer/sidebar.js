@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { escapeHtml } from './utils.js';
+import { escapeHtml, isChatItemId, isSessionItemId } from './utils.js';
 import { updateEmptyState } from './chat-messages.js';
 import { showInputModal } from './modal.js';
 import { addProject, configureProjects, deleteProject, markProjectAsSeen, renameProject } from './projects.js';
@@ -29,7 +29,7 @@ export function updateOpenClawBadge() {
 }
 
 export function selectItem(id) {
-  const isSessionItem = id.startsWith('session:');
+  const isSessionItem = isSessionItemId(id);
   const nextSessionKey = isSessionItem ? id.slice('session:'.length) : id === 'openclaw' ? 'default' : null;
   const shouldReloadHistory = typeof nextSessionKey === 'string' && state.currentSessionKey !== nextSessionKey;
   if (typeof nextSessionKey === 'string') {
@@ -46,7 +46,7 @@ export function selectItem(id) {
     el.classList.toggle('active', el.dataset.id === id);
   });
 
-  if (id === 'openclaw' || isSessionItem) {
+  if (isChatItemId(id)) {
     state.unreadCount = 0;
     updateOpenClawBadge();
     if (tabbar) tabbar.style.display = 'none';

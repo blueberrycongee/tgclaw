@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { scrollChatToBottom, updateEmptyState } from './chat-messages.js';
+import { isChatItemId } from './utils.js';
 
 const deps = {
   addAgentTab: () => {},
@@ -12,19 +13,19 @@ export function configureShortcuts(nextDeps) {
 }
 
 export function newShellTabFromShortcut() {
-  if (state.currentItem === 'openclaw') return;
+  if (isChatItemId(state.currentItem)) return;
   deps.addAgentTab('shell');
 }
 
 export function closeActiveTabFromShortcut() {
-  if (state.currentItem === 'openclaw') return;
+  if (isChatItemId(state.currentItem)) return;
   const currentTabId = state.activeTab[state.currentItem];
   if (!currentTabId) return;
   deps.closeTab(state.currentItem, currentTabId);
 }
 
 export function switchTabByIndexFromShortcut(index) {
-  if (state.currentItem === 'openclaw') return;
+  if (isChatItemId(state.currentItem)) return;
   const projectTabs = state.tabs[state.currentItem] || [];
   const targetTab = projectTabs[index];
   if (!targetTab) return;

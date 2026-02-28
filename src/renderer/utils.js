@@ -26,6 +26,18 @@ export function agentLabel(type) {
   return map[type] || type;
 }
 
+export function isSessionItemId(id) {
+  return typeof id === 'string' && id.startsWith('session:');
+}
+
+export function isChatItemId(id) {
+  return id === 'openclaw' || isSessionItemId(id);
+}
+
+export function isProjectItemId(id) {
+  return typeof id === 'string' && id.startsWith('proj-');
+}
+
 export async function copyTextToClipboard(text) {
   const value = String(text || '');
   if (!value) return;
