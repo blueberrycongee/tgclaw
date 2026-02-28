@@ -49,6 +49,12 @@
       <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Theme"></button>
     </div>
     <div id="add-tab-hover-menu" class="tab-add-hover-menu" role="menu" aria-label="Launch Agent">
+      <div id="tab-add-default-anchor" class="tab-add-default-anchor" role="button" aria-haspopup="true" aria-expanded="false">
+        <span class="tab-add-default-title">Default CLI</span>
+        <span id="tab-add-default-value" class="tab-add-default-value"></span>
+        <span class="tab-add-default-chevron">›</span>
+      </div>
+      <div class="tab-add-divider"></div>
       <button class="tab-add-option" type="button" data-agent-type="claude-code">
         <span class="tab-add-option-icon" data-agent-icon="claude-code"></span>
         <span class="tab-add-option-label">Claude Code</span>
@@ -80,6 +86,40 @@
       <button class="tab-add-option" type="button" data-agent-type="shell">
         <span class="tab-add-option-icon" data-agent-icon="shell"></span>
         <span class="tab-add-option-label">Shell</span>
+      </button>
+    </div>
+    <div id="add-tab-default-submenu" class="tab-add-default-submenu" role="menu" aria-label="Set Default CLI">
+      <button class="tab-add-default-option" type="button" data-agent-type="claude-code">
+        <span class="tab-add-default-option-icon" data-agent-icon="claude-code"></span>
+        <span class="tab-add-default-option-label">Claude Code</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="codex">
+        <span class="tab-add-default-option-icon" data-agent-icon="codex"></span>
+        <span class="tab-add-default-option-label">Codex</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="opencode">
+        <span class="tab-add-default-option-icon" data-agent-icon="opencode"></span>
+        <span class="tab-add-default-option-label">OpenCode</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="gemini">
+        <span class="tab-add-default-option-icon" data-agent-icon="gemini"></span>
+        <span class="tab-add-default-option-label">Gemini CLI</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="kimi">
+        <span class="tab-add-default-option-icon" data-agent-icon="kimi"></span>
+        <span class="tab-add-default-option-label">Kimi CLI</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="goose">
+        <span class="tab-add-default-option-icon" data-agent-icon="goose"></span>
+        <span class="tab-add-default-option-label">Goose</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="aider">
+        <span class="tab-add-default-option-icon" data-agent-icon="aider"></span>
+        <span class="tab-add-default-option-label">Aider</span>
+      </button>
+      <button class="tab-add-default-option" type="button" data-agent-type="shell">
+        <span class="tab-add-default-option-icon" data-agent-icon="shell"></span>
+        <span class="tab-add-default-option-label">Shell</span>
       </button>
     </div>
 

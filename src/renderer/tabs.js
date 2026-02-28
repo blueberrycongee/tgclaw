@@ -187,6 +187,14 @@ function getAddTabHoverMenu() {
   return document.getElementById('add-tab-hover-menu');
 }
 
+function getAddTabDefaultAnchor() {
+  return document.getElementById('tab-add-default-anchor');
+}
+
+function getAddTabDefaultSubmenu() {
+  return document.getElementById('add-tab-default-submenu');
+}
+
 function positionAddTabHoverMenu() {
   const addTabButton = document.getElementById('add-tab');
   const menu = getAddTabHoverMenu();
@@ -199,16 +207,57 @@ function positionAddTabHoverMenu() {
   menu.style.top = `${Math.round(rect.bottom + 6)}px`;
 }
 
+function positionAddTabDefaultSubmenu() {
+  const anchor = getAddTabDefaultAnchor();
+  const submenu = getAddTabDefaultSubmenu();
+  if (!anchor || !submenu) return;
+
+  const rect = anchor.getBoundingClientRect();
+  const submenuWidth = submenu.offsetWidth || 190;
+  const submenuHeight = submenu.offsetHeight || 280;
+  let left = rect.right + 4;
+  if (left + submenuWidth > window.innerWidth - 8) left = rect.left - submenuWidth - 4;
+  left = Math.max(8, left);
+
+  let top = rect.top;
+  if (top + submenuHeight > window.innerHeight - 8) top = window.innerHeight - submenuHeight - 8;
+  top = Math.max(8, top);
+
+  submenu.style.left = `${Math.round(left)}px`;
+  submenu.style.top = `${Math.round(top)}px`;
+}
+
+function showAddTabDefaultSubmenu() {
+  clearAddTabHoverHideTimer();
+  const menu = getAddTabHoverMenu();
+  const anchor = getAddTabDefaultAnchor();
+  const submenu = getAddTabDefaultSubmenu();
+  if (!menu?.classList.contains('show') || !anchor || !submenu) return;
+  submenu.classList.add('show');
+  anchor.setAttribute('aria-expanded', 'true');
+  positionAddTabDefaultSubmenu();
+}
+
+function hideAddTabDefaultSubmenu() {
+  const anchor = getAddTabDefaultAnchor();
+  const submenu = getAddTabDefaultSubmenu();
+  if (anchor) anchor.setAttribute('aria-expanded', 'false');
+  if (submenu) submenu.classList.remove('show');
+}
+
 function showAddTabHoverMenu() {
   clearAddTabHoverHideTimer();
   const menu = getAddTabHoverMenu();
   if (!menu) return;
+  hideAddTabDefaultSubmenu();
   menu.classList.add('show');
   positionAddTabHoverMenu();
+  updateAddTabDefaultUi();
 }
 
 function hideAddTabHoverMenu() {
   clearAddTabHoverHideTimer();
+  hideAddTabDefaultSubmenu();
   const menu = getAddTabHoverMenu();
   if (!menu) return;
   menu.classList.remove('show');
@@ -216,10 +265,14 @@ function hideAddTabHoverMenu() {
 
 function scheduleHideAddTabHoverMenu() {
   clearAddTabHoverHideTimer();
-  addTabHoverHideTimer = setTimeout(() => hideAddTabHoverMenu(), 120);
+  addTabHoverHideTimer = setTimeout(() => hideAddTabHoverMenu(), 180);
 }
 
 function getAddTabOptionTypes() {
+  const fromSubmenu = Array.from(document.querySelectorAll('#add-tab-default-submenu .tab-add-default-option[data-agent-type]'))
+    .map((option) => option.dataset.agentType)
+    .filter(Boolean);
+  if (fromSubmenu.length > 0) return fromSubmenu;
   return Array.from(document.querySelectorAll('#add-tab-hover-menu .tab-add-option[data-agent-type]'))
     .map((option) => option.dataset.agentType)
     .filter(Boolean);
@@ -238,10 +291,12 @@ function updateAddTabDefaultUi() {
   const label = agentLabel(addTabDefaultAgent);
   const addTabButton = document.getElementById('add-tab');
   const badge = document.getElementById('add-tab-default-badge');
+  const defaultValue = document.getElementById('tab-add-default-value');
   if (addTabButton) addTabButton.title = `New Tab (${label})`;
   if (badge) badge.textContent = `Default: ${label}`;
+  if (defaultValue) defaultValue.textContent = label;
 
-  document.querySelectorAll('#add-tab-hover-menu .tab-add-option').forEach((option) => {
+  document.querySelectorAll('#add-tab-default-submenu .tab-add-default-option').forEach((option) => {
     const isDefault = option.dataset.agentType === addTabDefaultAgent;
     option.classList.toggle('is-default', isDefault);
   });
@@ -267,7 +322,9 @@ export function hideAgentPicker() {
 export function initAgentPicker() {
   const addTabButton = document.getElementById('add-tab');
   const addTabHoverMenu = getAddTabHoverMenu();
-  if (addTabButton && addTabHoverMenu) {
+  const addTabDefaultAnchor = getAddTabDefaultAnchor();
+  const addTabDefaultSubmenu = getAddTabDefaultSubmenu();
+  if (addTabButton && addTabHoverMenu && addTabDefaultAnchor && addTabDefaultSubmenu) {
     addTabDefaultAgent = resolveDefaultAgent();
     updateAddTabDefaultUi();
 
@@ -291,21 +348,47 @@ export function initAgentPicker() {
       option.classList.add('pick-feedback');
       setTimeout(() => {
         option.classList.remove('pick-feedback');
-        setDefaultAgent(type);
         hideAddTabHoverMenu();
         void addAgentTab(type);
         agentPickerSelectionLocked = false;
       }, 120);
     }));
 
+    addTabDefaultAnchor.addEventListener('mouseenter', () => showAddTabDefaultSubmenu());
+    addTabDefaultAnchor.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showAddTabDefaultSubmenu();
+    });
+    addTabDefaultSubmenu.addEventListener('mouseenter', () => clearAddTabHoverHideTimer());
+    addTabDefaultSubmenu.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
+    addTabDefaultSubmenu.querySelectorAll('.tab-add-default-option').forEach((option) => option.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const type = option.dataset.agentType;
+      if (!type || agentPickerSelectionLocked) return;
+      agentPickerSelectionLocked = true;
+      option.classList.add('pick-feedback');
+      setTimeout(() => {
+        option.classList.remove('pick-feedback');
+        setDefaultAgent(type);
+        hideAddTabHoverMenu();
+        agentPickerSelectionLocked = false;
+      }, 120);
+    }));
+
     document.addEventListener('click', (event) => {
-      if (addTabButton.contains(event.target) || addTabHoverMenu.contains(event.target)) return;
+      if (
+        addTabButton.contains(event.target)
+        || addTabHoverMenu.contains(event.target)
+        || addTabDefaultSubmenu.contains(event.target)
+      ) return;
       hideAddTabHoverMenu();
     });
 
     window.addEventListener('resize', () => {
-      if (!addTabHoverMenu.classList.contains('show')) return;
-      positionAddTabHoverMenu();
+      if (addTabHoverMenu.classList.contains('show')) positionAddTabHoverMenu();
+      if (addTabDefaultSubmenu.classList.contains('show')) positionAddTabDefaultSubmenu();
     });
   }
 
