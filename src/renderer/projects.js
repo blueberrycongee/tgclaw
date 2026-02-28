@@ -9,7 +9,6 @@ const IDLE_ACTIVITY_WINDOW_MS = 120 * 1000;
 export function configureProjects({ selectItem }) {
   selectItemRef = selectItem;
 }
-
 function getProjectTerminalState(projectTabs) {
   const tabs = Array.isArray(projectTabs) ? projectTabs : [];
   return tabs.map((tab) => {
@@ -24,7 +23,6 @@ function getProjectTerminalState(projectTabs) {
         latestActivityAt,
       };
     }
-
     const now = Date.now();
     const state = now - lastActivityAt <= IDLE_ACTIVITY_WINDOW_MS ? 'working' : 'idle';
     return {
@@ -47,10 +45,8 @@ function isProjectAttentionNeeded(projectId, terminalState, isActiveProject, pre
   if (!previousState) return false;
   if (previousState.state !== terminalState.state) return true;
   if (terminalState.state === 'done' && previousState.latestActivityAt !== terminalState.latestActivityAt) return true;
-
   return false;
 }
-
 function getProjectTerminalStateLabel(terminalStates) {
   if (!terminalStates.length) return '';
   const stateWeight = { done: 0, idle: 1, working: 2 };
