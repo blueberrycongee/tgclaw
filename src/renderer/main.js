@@ -4,6 +4,7 @@ import './chat-inputbar-flat.css';
 import './tabbar-scroll.css';
 import './add-tab-hover-menu.css';
 import './chat-message-meta-separated.css';
+import './chat-markdown-contained.css';
 import { state } from './state.js';
 import { copyTextToClipboard, normalizeProject } from './utils.js';
 import { initStaticIcons } from './icons.js';
