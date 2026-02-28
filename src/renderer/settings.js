@@ -8,6 +8,7 @@ let settingsPanel = null;
 let urlInput = null;
 let tokenInput = null;
 let statusText = null;
+let autoConnectTried = false;
 
 export async function initSettings() {
   settingsPanel = document.getElementById('gateway-settings');
@@ -38,16 +39,15 @@ export async function initSettings() {
   gateway.on('error', () => updateConnectionStatus('disconnected'));
 
   updateConnectionStatus(gateway.connected ? 'connected' : 'disconnected');
-  const savedConfig = await loadSavedConfig();
-  if (savedConfig?.url && !gateway.connected) {
-    updateConnectionStatus('connecting');
-    try {
-      await gateway.connect(savedConfig.url, savedConfig.token);
-      await syncSessionsFromGateway();
-    } catch {
-      updateConnectionStatus('disconnected');
-    }
+  const config = await loadSavedConfig();
+
+  if (!config.configured) {
+    updateConnectionStatus('unconfigured');
+    showSettings();
+    return;
   }
+
+  void attemptAutoConnect();
 }
 
 async function syncSessionsFromGateway() {
@@ -72,9 +72,16 @@ async function loadSavedConfig() {
   const saved = await window.tgclaw.getGatewayConfig();
   const url = typeof saved?.url === 'string' && saved.url ? saved.url : DEFAULT_GATEWAY_URL;
   const token = typeof saved?.token === 'string' ? saved.token : '';
+  const configured = saved?.configured === true;
   if (urlInput) urlInput.value = url;
   if (tokenInput) tokenInput.value = token;
-  return { url, token };
+  return { url, token, configured };
+}
+
+async function attemptAutoConnect() {
+  if (autoConnectTried || gateway.connected) return;
+  autoConnectTried = true;
+  await handleConnect({ persist: false, silentFailure: true });
 }
 
 export function showSettings() {
@@ -85,18 +92,22 @@ export function hideSettings() {
   settingsPanel?.classList.remove('show');
 }
 
-export async function handleConnect() {
+export async function handleConnect(options = {}) {
+  const persist = options.persist !== false;
+  const silentFailure = options.silentFailure === true;
   const url = urlInput?.value.trim() || DEFAULT_GATEWAY_URL;
   const token = tokenInput?.value || '';
 
   updateConnectionStatus('connecting');
-  await window.tgclaw.saveGatewayConfig({ url, token });
+  if (persist) await window.tgclaw.saveGatewayConfig({ url, token, configured: true });
 
   try {
     await gateway.connect(url, token);
     updateConnectionStatus('connected');
+    hideSettings();
   } catch {
     updateConnectionStatus('disconnected');
+    if (!silentFailure) showSettings();
   }
 }
 
@@ -108,7 +119,7 @@ export function handleDisconnect() {
 export function updateConnectionStatus(status) {
   if (!statusText) return;
 
-  statusText.classList.remove('connected', 'connecting', 'disconnected');
+  statusText.classList.remove('connected', 'connecting', 'disconnected', 'unconfigured');
 
   if (status === 'connecting') {
     statusText.textContent = 'Connecting...';
@@ -119,6 +130,12 @@ export function updateConnectionStatus(status) {
   if (status === 'connected') {
     statusText.textContent = 'Connected';
     statusText.classList.add('connected');
+    return;
+  }
+
+  if (status === 'unconfigured') {
+    statusText.textContent = 'Needs setup';
+    statusText.classList.add('unconfigured');
     return;
   }
 
