@@ -56,15 +56,33 @@ function registerIpcHandlers(ipcMain) {
 
   ipcMain.handle('gateway:get-config', () => {
     const saved = store.get('gatewayConfig', {});
+    const legacy = store.get('gateway', {});
     const hasSavedConfig = !!saved && typeof saved === 'object'
       && (
         Object.prototype.hasOwnProperty.call(saved, 'url')
         || Object.prototype.hasOwnProperty.call(saved, 'token')
         || saved.configured === true
       );
-    const url = typeof saved?.url === 'string' && saved.url ? saved.url : 'ws://localhost:18789';
-    const token = typeof saved?.token === 'string' ? saved.token : '';
-    const configured = saved?.configured === true || hasSavedConfig;
+    const hasLegacyConfig = !!legacy && typeof legacy === 'object'
+      && (
+        Object.prototype.hasOwnProperty.call(legacy, 'url')
+        || Object.prototype.hasOwnProperty.call(legacy, 'token')
+      );
+
+    const savedUrl = typeof saved?.url === 'string' ? saved.url.trim() : '';
+    const legacyUrl = typeof legacy?.url === 'string' ? legacy.url.trim() : '';
+    const savedToken = typeof saved?.token === 'string' ? saved.token : '';
+    const legacyToken = typeof legacy?.token === 'string' ? legacy.token : '';
+
+    const url = savedUrl || legacyUrl || 'ws://localhost:18789';
+    const token = savedToken || legacyToken || '';
+    const configured = saved?.configured === true || hasSavedConfig || hasLegacyConfig;
+
+    // Compatibility migration: promote legacy gateway config to gatewayConfig.
+    if ((!savedUrl || !savedToken || !hasSavedConfig) && (legacyUrl || legacyToken || hasLegacyConfig)) {
+      store.set('gatewayConfig', { url, token, configured });
+    }
+
     return { url, token, configured };
   });
 
@@ -74,6 +92,7 @@ function registerIpcHandlers(ipcMain) {
     const token = typeof next.token === 'string' ? next.token : '';
     const configured = typeof next.configured === 'boolean' ? next.configured : true;
     store.set('gatewayConfig', { url, token, configured });
+    store.set('gateway', { url, token });
     return { url, token, configured };
   });
 

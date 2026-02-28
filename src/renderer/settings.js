@@ -10,6 +10,7 @@ let urlInput = null;
 let tokenInput = null;
 let statusText = null;
 let autoConnectTried = false;
+let savedGatewayToken = '';
 
 function mergeSessions(remoteSessions, cachedSessions) {
   const merged = [];
@@ -98,6 +99,7 @@ async function loadSavedConfig() {
   const url = typeof saved?.url === 'string' && saved.url ? saved.url : DEFAULT_GATEWAY_URL;
   const token = typeof saved?.token === 'string' ? saved.token : '';
   const configured = saved?.configured === true;
+  savedGatewayToken = token;
   if (urlInput) urlInput.value = url;
   if (tokenInput) tokenInput.value = token;
   return { url, token, configured };
@@ -106,7 +108,30 @@ async function loadSavedConfig() {
 async function attemptAutoConnect() {
   if (autoConnectTried || gateway.connected) return;
   autoConnectTried = true;
+
   await handleConnect({ persist: false, silentFailure: true });
+  if (gateway.connected) return;
+
+  const savedUrl = urlInput?.value.trim() || '';
+  const fallbackUrls = [DEFAULT_GATEWAY_URL, 'ws://127.0.0.1:18789']
+    .filter((url, index, arr) => arr.indexOf(url) === index && url !== savedUrl);
+
+  for (const fallbackUrl of fallbackUrls) {
+    await handleConnect({
+      persist: false,
+      silentFailure: true,
+      urlOverride: fallbackUrl,
+    });
+    if (gateway.connected) {
+      if (urlInput) urlInput.value = fallbackUrl;
+      await window.tgclaw.saveGatewayConfig({
+        url: fallbackUrl,
+        token: tokenInput?.value || '',
+        configured: true,
+      });
+      return;
+    }
+  }
 }
 
 export function showSettings() {
@@ -120,14 +145,19 @@ export function hideSettings() {
 export async function handleConnect(options = {}) {
   const persist = options.persist !== false;
   const silentFailure = options.silentFailure === true;
-  const url = urlInput?.value.trim() || DEFAULT_GATEWAY_URL;
-  const token = tokenInput?.value || '';
+  const url = typeof options.urlOverride === 'string' && options.urlOverride.trim()
+    ? options.urlOverride.trim()
+    : (urlInput?.value.trim() || DEFAULT_GATEWAY_URL);
+  const inputToken = typeof options.tokenOverride === 'string' ? options.tokenOverride : (tokenInput?.value || '');
+  const token = inputToken || savedGatewayToken;
 
   updateConnectionStatus('connecting');
   if (persist) await window.tgclaw.saveGatewayConfig({ url, token, configured: true });
 
   try {
     await gateway.connect(url, token);
+    savedGatewayToken = token;
+    if (tokenInput && !tokenInput.value && token) tokenInput.value = token;
     updateConnectionStatus('connected');
     hideSettings();
   } catch {
