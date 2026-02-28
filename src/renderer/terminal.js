@@ -114,7 +114,12 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart }
   let termId = null;
   let spawnError = '';
   if (type === 'shell') {
-    termId = await window.tgclaw.createPty({ cols: term.cols, rows: term.rows, cwd: project.cwd });
+    const result = await window.tgclaw.createPty({ cols: term.cols, rows: term.rows, cwd: project.cwd });
+    if (result && typeof result === 'object' && typeof result.error === 'string') {
+      spawnError = result.error;
+    } else {
+      termId = result;
+    }
   } else {
     const result = await window.tgclaw.spawnAgent({ type, cwd: project.cwd, cols: term.cols, rows: term.rows });
     if (result && typeof result === 'object' && typeof result.error === 'string') {
@@ -176,7 +181,7 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart }
       cleanupInput();
       cleanupResize();
       cleanupRestart();
-      if (termId !== null && termId !== undefined) {
+      if (typeof termId === 'number') {
         window.tgclaw.killPty(termId);
       }
       term.dispose();

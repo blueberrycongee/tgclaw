@@ -1,7 +1,10 @@
 const pty = require('node-pty');
+const fs = require('fs');
+const path = require('path');
 
 const terminals = {};
 let nextTermId = 1;
+let spawnHelperPrepared = false;
 
 const agentCommands = {
   'claude-code': { cmd: 'claude', args: [] },
@@ -10,13 +13,94 @@ const agentCommands = {
   aider: { cmd: 'aider', args: [] },
 };
 
+function asarVariants(filePath) {
+  const variants = [filePath];
+  if (filePath.includes('.asar/')) variants.push(filePath.replace('.asar/', '.asar.unpacked/'));
+  return variants;
+}
+
+function ensureExecutable(filePath) {
+  if (!fs.existsSync(filePath)) return false;
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    try {
+      fs.chmodSync(filePath, 0o755);
+      return true;
+    } catch (error) {
+      console.warn(`Failed to chmod +x ${filePath}:`, error);
+      return false;
+    }
+  }
+}
+
+function prepareSpawnHelper() {
+  if (spawnHelperPrepared || process.platform !== 'darwin') return;
+  spawnHelperPrepared = true;
+
+  try {
+    const packageRoot = path.dirname(require.resolve('node-pty/package.json'));
+    const candidates = [
+      path.join(packageRoot, 'build', 'Release', 'spawn-helper'),
+      path.join(packageRoot, 'prebuilds', `darwin-${process.arch}`, 'spawn-helper'),
+      path.join(packageRoot, 'prebuilds', 'darwin-arm64', 'spawn-helper'),
+      path.join(packageRoot, 'prebuilds', 'darwin-x64', 'spawn-helper'),
+    ];
+    const checked = new Set();
+    for (const candidate of candidates) {
+      for (const variant of asarVariants(candidate)) {
+        if (checked.has(variant)) continue;
+        checked.add(variant);
+        if (ensureExecutable(variant)) return;
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to prepare node-pty spawn-helper:', error);
+  }
+}
+
+function resolveCommand(cmd, envPath) {
+  if (typeof cmd !== 'string' || !cmd.trim()) return null;
+  if (cmd.includes('/')) {
+    return fs.existsSync(cmd) ? cmd : null;
+  }
+
+  const pathValue = typeof envPath === 'string' ? envPath : '';
+  const segments = pathValue.split(path.delimiter).filter(Boolean);
+  for (const segment of segments) {
+    const candidate = path.join(segment, cmd);
+    if (!fs.existsSync(candidate)) continue;
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // Continue searching another PATH segment.
+    }
+  }
+  return null;
+}
+
 function spawnProcess({ cmd, args = [], cols, rows, cwd }) {
-  return pty.spawn(cmd, args, {
+  prepareSpawnHelper();
+  const workingDir = cwd || process.env.HOME;
+  if (!workingDir || !fs.existsSync(workingDir)) {
+    throw new Error(`Working directory does not exist: ${String(workingDir)}`);
+  }
+
+  const env = { ...process.env, TERM: 'xterm-256color' };
+
+  const resolvedCmd = resolveCommand(cmd, env.PATH);
+  if (!resolvedCmd) {
+    throw new Error(`Command not found in PATH: ${cmd}`);
+  }
+
+  return pty.spawn(resolvedCmd, args, {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
-    cwd: cwd || process.env.HOME,
-    env: { ...process.env, TERM: 'xterm-256color' },
+    cwd: workingDir,
+    env,
   });
 }
 
