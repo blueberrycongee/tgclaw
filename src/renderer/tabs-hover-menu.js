@@ -1,20 +1,16 @@
 import { agentLabel } from './utils.js';
-
 let agentPickerSelectionLocked = false;
 let addTabHoverHideTimer = null;
 let addTabDefaultAgent = 'shell';
 const ADD_TAB_DEFAULT_KEY = 'tgclaw:add-tab-default-agent';
 const hooks = { addAgentTab: () => Promise.resolve(null) };
-
 function clearAddTabHoverHideTimer() {
   if (addTabHoverHideTimer) clearTimeout(addTabHoverHideTimer);
   addTabHoverHideTimer = null;
 }
-
 function getAddTabHoverMenu() { return document.getElementById('add-tab-hover-menu'); }
 function getAddTabDefaultAnchor() { return document.getElementById('tab-add-default-anchor'); }
 function getAddTabDefaultSubmenu() { return document.getElementById('add-tab-default-submenu'); }
-
 function positionAddTabHoverMenu() {
   const addTabButton = document.getElementById('add-tab');
   const menu = getAddTabHoverMenu();
@@ -25,7 +21,6 @@ function positionAddTabHoverMenu() {
   menu.style.left = `${Math.round(left)}px`;
   menu.style.top = `${Math.round(rect.bottom + 6)}px`;
 }
-
 function positionAddTabDefaultSubmenu() {
   const anchor = getAddTabDefaultAnchor();
   const submenu = getAddTabDefaultSubmenu();
@@ -42,7 +37,6 @@ function positionAddTabDefaultSubmenu() {
   submenu.style.left = `${Math.round(left)}px`;
   submenu.style.top = `${Math.round(top)}px`;
 }
-
 function showAddTabDefaultSubmenu() {
   clearAddTabHoverHideTimer();
   const menu = getAddTabHoverMenu();
@@ -53,14 +47,12 @@ function showAddTabDefaultSubmenu() {
   anchor.setAttribute('aria-expanded', 'true');
   positionAddTabDefaultSubmenu();
 }
-
 function hideAddTabDefaultSubmenu() {
   const anchor = getAddTabDefaultAnchor();
   const submenu = getAddTabDefaultSubmenu();
   if (anchor) anchor.setAttribute('aria-expanded', 'false');
   if (submenu) submenu.classList.remove('show');
 }
-
 function showAddTabHoverMenu() {
   clearAddTabHoverHideTimer();
   const menu = getAddTabHoverMenu();
@@ -70,7 +62,6 @@ function showAddTabHoverMenu() {
   positionAddTabHoverMenu();
   updateAddTabDefaultUi();
 }
-
 export function hideAddTabHoverMenu() {
   clearAddTabHoverHideTimer();
   hideAddTabDefaultSubmenu();
@@ -78,12 +69,10 @@ export function hideAddTabHoverMenu() {
   if (!menu) return;
   menu.classList.remove('show');
 }
-
 function scheduleHideAddTabHoverMenu() {
   clearAddTabHoverHideTimer();
   addTabHoverHideTimer = setTimeout(() => hideAddTabHoverMenu(), 180);
 }
-
 function getAddTabOptionTypes() {
   const fromSubmenu = Array.from(document.querySelectorAll('#add-tab-default-submenu .tab-add-default-option[data-agent-type]'))
     .map((option) => option.dataset.agentType)
@@ -93,7 +82,6 @@ function getAddTabOptionTypes() {
     .map((option) => option.dataset.agentType)
     .filter(Boolean);
 }
-
 function resolveDefaultAgent() {
   const optionTypes = getAddTabOptionTypes();
   if (optionTypes.length === 0) return 'shell';
@@ -102,7 +90,6 @@ function resolveDefaultAgent() {
   if (optionTypes.includes('shell')) return 'shell';
   return optionTypes[0];
 }
-
 function updateAddTabDefaultUi() {
   const label = agentLabel(addTabDefaultAgent);
   const addTabButton = document.getElementById('add-tab');
@@ -116,26 +103,22 @@ function updateAddTabDefaultUi() {
     option.classList.toggle('is-default', isDefault);
   });
 }
-
 function setDefaultAgent(type) {
   if (!type || typeof type !== 'string') return;
   addTabDefaultAgent = type;
   localStorage.setItem(ADD_TAB_DEFAULT_KEY, type);
   updateAddTabDefaultUi();
 }
-
 export function showAgentPicker() {
   agentPickerSelectionLocked = false;
   hideAddTabHoverMenu();
   document.getElementById('agent-picker')?.classList.add('show');
 }
-
 export function hideAgentPicker() {
   agentPickerSelectionLocked = false;
   document.getElementById('agent-picker')?.classList.remove('show');
   hideAddTabHoverMenu();
 }
-
 export function initAgentPicker(nextHooks = {}) {
   if (typeof nextHooks.addAgentTab === 'function') hooks.addAgentTab = nextHooks.addAgentTab;
   const addTabButton = document.getElementById('add-tab');
