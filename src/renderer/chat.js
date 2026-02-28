@@ -1,5 +1,5 @@
 import { renderBotMessage } from './markdown.js';
-import { animateMessageEntry, appendMessage, configureChatMessages, createStreamMessage, notifyIncomingBotMessage, scrollChatToBottom, updateEmptyState } from './chat-messages.js';
+import { addCodeBlockCopyButtons, animateMessageEntry, appendMessage, configureChatMessages, createStreamMessage, notifyIncomingBotMessage, scrollChatToBottom, updateEmptyState } from './chat-messages.js';
 import { state } from './state.js';
 import { gateway } from './gateway.js';
 import { renderSessions } from './sidebar.js';
@@ -202,6 +202,7 @@ function handleGatewayChat(frame) {
     const finalText = extractFrameText(frame) || currentStreamText;
     if (currentStreamDiv) {
       renderBotMessage(currentStreamDiv, finalText);
+      addCodeBlockCopyButtons(currentStreamDiv);
       scrollChatToBottom();
     } else if (finalText) {
       appendMessage(finalText, 'from-bot');
