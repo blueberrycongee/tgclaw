@@ -5,19 +5,45 @@ import 'highlight.js/styles/github-dark.css';
 import { state } from './state.js';
 import { gateway } from './gateway.js';
 
+function escapeHtml(value) {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+function normalizeLanguage(lang) {
+  if (typeof lang !== 'string') return '';
+  return lang.trim().split(/\s+/, 1)[0];
+}
+function highlightCode(code, lang) {
+  if (lang && hljs.getLanguage(lang)) {
+    return hljs.highlight(code, { language: lang }).value;
+  }
+  return hljs.highlightAuto(code).value;
+}
+
 const marked = new Marked(
   markedHighlight({
     emptyLangClass: 'hljs',
     langPrefix: 'hljs language-',
     highlight(code, lang) {
-      const normalizedLang = typeof lang === 'string' ? lang.trim().split(/\s+/, 1)[0] : '';
-      if (normalizedLang && hljs.getLanguage(normalizedLang)) {
-        return hljs.highlight(code, { language: normalizedLang }).value;
-      }
-      return hljs.highlightAuto(code).value;
+      return highlightCode(code, normalizeLanguage(lang));
     },
   }),
 );
+marked.use({
+  renderer: {
+    code({ text, lang }) {
+      const normalizedLang = normalizeLanguage(lang);
+      const languageClass = normalizedLang ? `hljs language-${escapeHtml(normalizedLang)}` : 'hljs';
+      const languageLabel = escapeHtml(normalizedLang || 'plaintext');
+      const highlightedCode = highlightCode(text, normalizedLang);
+      return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${languageLabel}</span><button class="code-copy-btn" type="button" title="Copy">📋</button></div><pre><code class="${languageClass}">${highlightedCode}</code></pre></div>`;
+    },
+  },
+});
 
 let updateOpenClawBadgeRef = () => {};
 let chatInput = null;
@@ -89,6 +115,49 @@ function notifyIncomingBotMessage(text) {
 function renderBotMessage(div, text) {
   if (marked?.parse) div.innerHTML = marked.parse(text);
   else div.textContent = text;
+}
+async function copyTextToClipboard(text) {
+  if (!text) return false;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (error) {
+      void error;
+    }
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
+  document.body.appendChild(textarea);
+  textarea.select();
+  const copied = document.execCommand('copy');
+  textarea.remove();
+  return copied;
+}
+function showCopySuccess(button) {
+  button.textContent = '✅';
+  button.disabled = true;
+  window.setTimeout(() => {
+    button.textContent = '📋';
+    button.disabled = false;
+  }, 1200);
+}
+function handleChatMessageClick(event) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const copyButton = target.closest('.code-copy-btn');
+  if (!(copyButton instanceof HTMLButtonElement)) return;
+  const wrapper = copyButton.closest('.code-block-wrapper');
+  const codeElement = wrapper?.querySelector('pre code');
+  const codeText = codeElement?.textContent || '';
+  if (!codeText) return;
+  void copyTextToClipboard(codeText).then((copied) => {
+    if (copied) showCopySuccess(copyButton);
+  });
 }
 function scrollChatToBottom() {
   const container = document.getElementById('chat-messages');
@@ -306,6 +375,7 @@ export function initChat() {
 
   document.getElementById('chat-send')?.addEventListener('click', sendChat);
   document.getElementById('chat-stop')?.addEventListener('click', abortChat);
+  document.getElementById('chat-messages')?.addEventListener('click', handleChatMessageClick);
   chatInput.addEventListener('input', resizeChatInput);
   chatInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
