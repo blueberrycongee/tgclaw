@@ -5,10 +5,10 @@ import { initStaticIcons } from './icons.js';
 import {
   configureSidebar,
   initSidebarBindings,
-  renderProjects,
   selectItem,
   updateOpenClawBadge,
 } from './sidebar.js';
+import { renderProjects } from './projects.js';
 import {
   addAgentTab,
   closeTab,
