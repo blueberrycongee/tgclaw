@@ -6,8 +6,8 @@ import '@xterm/xterm/css/xterm.css';
 import { state } from './state.js';
 
 let resolveActiveProjectTab = () => null;
-const DARK_THEME = { background: '#17212b', foreground: '#e1e3e6', cursor: '#5eb5f7', selectionBackground: 'rgba(94,181,247,0.3)' };
-const LIGHT_THEME = { background: '#ffffff', foreground: '#1a1a1a', cursor: '#0066cc', selectionBackground: 'rgba(0,102,204,0.2)' };
+const DARK_THEME = { background: '#000000', foreground: '#fafafa', cursor: '#0070f3', selectionBackground: 'rgba(0,112,243,0.25)' };
+const LIGHT_THEME = { background: '#ffffff', foreground: '#171717', cursor: '#0070f3', selectionBackground: 'rgba(0,112,243,0.15)' };
 function getTerminalTheme(theme) { return theme === 'light' ? LIGHT_THEME : DARK_THEME; }
 export function configureTerminal({ getActiveProjectTab }) { resolveActiveProjectTab = getActiveProjectTab; }
 
@@ -92,7 +92,7 @@ export function applyTerminalTheme(theme) {
 }
 
 export function createBaseTerminal() {
-  return new Terminal({ theme: getTerminalTheme(state.terminalTheme), fontSize: 13, fontFamily: 'Menlo, Monaco, "Courier New", monospace', cursorBlink: true, allowProposedApi: true });
+  return new Terminal({ theme: getTerminalTheme(state.terminalTheme), fontSize: 13, fontFamily: 'ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace", "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New", monospace', cursorBlink: true, allowProposedApi: true });
 }
 
 export async function createTerminal({ tabId, type, project, onExit, onRestart }) {
