@@ -5,14 +5,12 @@ import { gateway } from './gateway.js';
 import { renderSessions, selectItem } from './sidebar.js';
 import { appendCachedMessage, ensureChatCacheLoaded, getCachedMessages, getCachedSessions, setCachedMessages } from './chat-cache.js';
 let chatInput = null;
-let currentStreamDiv = null;
-let currentStreamText = '';
 let currentRunId = null;
-let currentStreamStartedAt = 0;
+let currentRunKey = '';
 let isStreaming = false;
 let assistantPending = false;
 let gatewayOnline = false;
-let streamRenderQueued = false;
+const streamRuns = new Map();
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
 let typingIndicatorDiv = null;
@@ -60,6 +58,28 @@ function abortChat() {
   if (!isStreaming || !currentRunId) return;
   void gateway.chatAbort(state.currentSessionKey, currentRunId).catch(() => {});
 }
+function activeRunEntriesForSession(sessionKey) {
+  const key = sessionKey || 'default';
+  return Array.from(streamRuns.entries()).filter(([, run]) => run.sessionKey === key);
+}
+function syncStreamingUiState() {
+  const activeRuns = activeRunEntriesForSession(state.currentSessionKey);
+  isStreaming = activeRuns.length > 0;
+  if (isStreaming) showStopButton();
+  else hideStopButton();
+
+  if (currentRunKey && streamRuns.has(currentRunKey)) {
+    currentRunId = streamRuns.get(currentRunKey).runId || currentRunId;
+  } else if (activeRuns.length > 0) {
+    const [latestRunKey, latestRun] = activeRuns[activeRuns.length - 1];
+    currentRunKey = latestRunKey;
+    currentRunId = latestRun.runId || currentRunId;
+  } else {
+    currentRunKey = '';
+    currentRunId = null;
+  }
+  renderChatHeaderStatus();
+}
 function renderChatHeaderStatus() {
   if (!chatHeaderStatus || !chatHeaderStatusText) return;
 
@@ -81,14 +101,14 @@ function renderChatHeaderStatus() {
 }
 function resetStreamingState() {
   clearTypingIndicator();
-  if (currentStreamDiv?.parentElement) currentStreamDiv.parentElement.classList.remove('is-streaming');
-  currentStreamDiv = null;
-  currentStreamText = '';
+  streamRuns.forEach((run) => {
+    if (run.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
+  });
+  streamRuns.clear();
   currentRunId = null;
-  currentStreamStartedAt = 0;
+  currentRunKey = '';
   isStreaming = false;
   assistantPending = false;
-  streamRenderQueued = false;
   hideStopButton();
   renderChatHeaderStatus();
 }
@@ -188,16 +208,6 @@ export async function reloadChatHistory() {
   }
   updateEmptyState();
 }
-function queueStreamRender() {
-  if (!currentStreamDiv || streamRenderQueued) return;
-  streamRenderQueued = true;
-  requestAnimationFrame(() => {
-    streamRenderQueued = false;
-    if (!currentStreamDiv) return;
-    currentStreamDiv.textContent = currentStreamText;
-    scrollChatToBottom();
-  });
-}
 function extractMessageContent(message) {
   if (typeof message === 'string') return message;
   if (!message || typeof message !== 'object') return '';
@@ -262,6 +272,37 @@ function mergeStreamText(currentText, frame) {
 
   return merged;
 }
+function extractFrameRunId(frame) {
+  if (typeof frame?.runId === 'string' && frame.runId.trim()) return frame.runId.trim();
+  if (typeof frame?.run?.id === 'string' && frame.run.id.trim()) return frame.run.id.trim();
+  return '';
+}
+function extractFrameSessionKey(frame) {
+  const keys = [
+    frame?.sessionKey,
+    frame?.session?.sessionKey,
+    frame?.session?.key,
+    frame?.session,
+  ];
+  const sessionKey = keys.find((item) => typeof item === 'string' && item.trim());
+  return typeof sessionKey === 'string' ? sessionKey.trim() : (state.currentSessionKey || 'default');
+}
+function streamRunKey(frame) {
+  const sessionKey = extractFrameSessionKey(frame);
+  const runId = extractFrameRunId(frame);
+  if (runId) return { key: `${sessionKey}:${runId}`, sessionKey, runId };
+  return { key: `${sessionKey}:anonymous`, sessionKey, runId: '' };
+}
+function queueStreamRender(run) {
+  if (!run?.contentDiv || run.renderQueued) return;
+  run.renderQueued = true;
+  requestAnimationFrame(() => {
+    run.renderQueued = false;
+    if (!run.contentDiv) return;
+    run.contentDiv.textContent = run.text;
+    scrollChatToBottom();
+  });
+}
 function formatGatewayErrorMessage(rawMessage) {
   const message = typeof rawMessage === 'string' && rawMessage.trim()
     ? rawMessage.trim()
@@ -275,55 +316,86 @@ function formatGatewayErrorMessage(rawMessage) {
   return `${message} Hint: if Claude Code works with the same relay, check OpenClaw provider headers/auth mode (Bearer auth + Claude CLI headers).`;
 }
 function handleGatewayChat(frame) {
-  clearTypingIndicator();
   const eventState = typeof frame?.state === 'string' ? frame.state : '';
+  const { key: runKey, sessionKey: frameSessionKey, runId: frameRunId } = streamRunKey(frame);
+  const isCurrentSessionFrame = frameSessionKey === (state.currentSessionKey || 'default');
+
+  if (assistantPending && isCurrentSessionFrame) assistantPending = false;
+
   if (eventState === 'delta') {
     const delta = extractFrameText(frame);
     if (!delta) return;
-    if (typeof frame?.runId === 'string' && frame.runId) currentRunId = frame.runId;
-    assistantPending = false;
-    isStreaming = true;
-    showStopButton();
-    renderChatHeaderStatus();
-    if (!currentStreamDiv) {
-      currentStreamDiv = createStreamMessage();
-      if (currentStreamDiv?.parentElement) currentStreamDiv.parentElement.classList.add('is-streaming');
-      currentStreamText = '';
-      currentStreamStartedAt = Date.now();
+
+    let run = streamRuns.get(runKey);
+    if (!run) {
+      if (!isCurrentSessionFrame) return;
+      clearTypingIndicator();
+      const contentDiv = createStreamMessage();
+      if (contentDiv?.parentElement) contentDiv.parentElement.classList.add('is-streaming');
+      run = {
+        key: runKey,
+        runId: frameRunId,
+        sessionKey: frameSessionKey,
+        text: '',
+        startedAt: Date.now(),
+        contentDiv,
+        renderQueued: false,
+      };
+      streamRuns.set(runKey, run);
+    } else if (frameRunId && !run.runId) {
+      run.runId = frameRunId;
     }
-    currentStreamText = mergeStreamText(currentStreamText, frame);
-    queueStreamRender();
+
+    if (isCurrentSessionFrame) {
+      run.text = mergeStreamText(run.text, frame);
+      queueStreamRender(run);
+      currentRunKey = runKey;
+      if (run.runId) currentRunId = run.runId;
+      syncStreamingUiState();
+    }
     return;
   }
+
   if (eventState === 'final') {
-    const finalText = extractFrameText(frame) || currentStreamText;
-    if (currentStreamDiv) {
-      if (currentStreamDiv.parentElement) currentStreamDiv.parentElement.classList.remove('is-streaming');
-      renderBotMessage(currentStreamDiv, finalText);
-      addCodeBlockCopyButtons(currentStreamDiv);
+    const run = streamRuns.get(runKey);
+    const finalText = extractFrameText(frame) || run?.text || '';
+    if (run?.contentDiv && isCurrentSessionFrame) {
+      if (run.contentDiv.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
+      renderBotMessage(run.contentDiv, finalText);
+      addCodeBlockCopyButtons(run.contentDiv);
       scrollChatToBottom();
-    } else if (finalText) {
-      appendMessage(finalText, 'from-bot');
+    } else if (finalText && isCurrentSessionFrame) {
+      appendMessage(finalText, 'from-bot', { createdAt: Date.now() });
     }
+
     if (finalText) {
-      appendCachedMessage(state.currentSessionKey, {
+      appendCachedMessage(frameSessionKey, {
         role: 'assistant',
         content: finalText,
-        createdAt: currentStreamStartedAt || Date.now(),
+        createdAt: run?.startedAt || Date.now(),
       }, {
-        label: sessionLabelForKey(state.currentSessionKey),
-        touchSession: state.currentSessionKey !== 'default',
+        label: sessionLabelForKey(frameSessionKey),
+        touchSession: frameSessionKey !== 'default',
       });
     }
-    if (finalText) notifyIncomingBotMessage(finalText);
-    resetStreamingState();
+    if (finalText && isCurrentSessionFrame) notifyIncomingBotMessage(finalText);
+    if (run) {
+      if (run.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
+      streamRuns.delete(runKey);
+    }
+    if (currentRunKey === runKey) currentRunKey = '';
+    syncStreamingUiState();
     return;
   }
   if (eventState === 'error') {
     const rawMessage = frame?.error?.message || frame?.errorMessage || extractFrameText(frame);
     const message = formatGatewayErrorMessage(rawMessage);
-    resetStreamingState();
-    appendMessage(`Gateway error: ${message}`, 'from-bot message-error');
+    const run = streamRuns.get(runKey);
+    if (run?.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
+    streamRuns.delete(runKey);
+    if (currentRunKey === runKey) currentRunKey = '';
+    if (isCurrentSessionFrame) appendMessage(`Gateway error: ${message}`, 'from-bot message-error');
+    syncStreamingUiState();
   }
 }
 export function sendChat() {
