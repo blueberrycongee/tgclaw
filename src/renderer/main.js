@@ -6,12 +6,11 @@ import './add-tab-hover-menu.css';
 import './chat-message-meta-separated.css';
 import './chat-markdown-contained.css';
 import { state } from './state.js';
-import { copyTextToClipboard, normalizeProject } from './utils.js';
+import { copyTextToClipboard, isChatItemId, normalizeProject } from './utils.js';
 import { initStaticIcons } from './icons.js';
 import {
   configureSidebar,
   initSidebarBindings,
-  selectItem,
   updateOpenClawBadge,
 } from './sidebar.js';
 import { renderProjects } from './projects.js';
@@ -51,20 +50,16 @@ function initQuickLaunchBindings() {
   document.querySelectorAll('.quick-agent-btn[data-agent-type]').forEach((button) => {
     button.addEventListener('click', () => {
       const type = button.dataset.agentType;
-      if (!type || state.currentItem === 'openclaw') return;
+      if (!type || isChatItemId(state.currentItem)) return;
       void addAgentTab(type);
     });
   });
 }
 
-function isChatItem(id) {
-  return id === 'openclaw' || id.startsWith('session:');
-}
-
 function bindGlobalEvents() {
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
-      if (!isChatItem(state.currentItem)) {
+      if (!isChatItemId(state.currentItem)) {
         event.preventDefault();
         openTerminalSearch();
       }
@@ -86,7 +81,7 @@ function bindGlobalEvents() {
   });
 
   window.addEventListener('resize', () => {
-    if (isChatItem(state.currentItem)) return;
+    if (isChatItemId(state.currentItem)) return;
     const active = state.activeTab[state.currentItem];
     const tab = (state.tabs[state.currentItem] || []).find((item) => item.id === active);
     if (tab?.fitAddon) tab.fitAddon.fit();
@@ -98,9 +93,8 @@ function bindGlobalEvents() {
     const restartType = tabType || (tab ? tab.type : '');
     if (!restartType) return;
 
-    if (state.currentItem !== projectId) selectItem(projectId);
     closeTab(projectId, tabId);
-    await addAgentTab(restartType);
+    await addAgentTab(restartType, { projectId });
   });
 
   window.tgclaw.onTabCopyName(async ({ projectId, tabId, tabName }) => {

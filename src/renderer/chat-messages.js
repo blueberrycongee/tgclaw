@@ -1,5 +1,6 @@
 import { renderBotMessage } from './markdown.js';
 import { state } from './state.js';
+import { isChatItemId } from './utils.js';
 
 const MESSAGE_ENTER_DURATION_MS = 180;
 let updateOpenClawBadgeRef = () => {};
@@ -49,7 +50,7 @@ export function updateEmptyState() {
 }
 
 function activeChatItem() {
-  return state.currentItem === 'openclaw' || state.currentItem.startsWith('session:');
+  return isChatItemId(state.currentItem);
 }
 
 export function markBotUnread() {
