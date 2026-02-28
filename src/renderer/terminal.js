@@ -4,6 +4,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { state } from './state.js';
+import { isChatItemId } from './utils.js';
 
 let resolveActiveProjectTab = () => null;
 const DARK_THEME = { background: '#000000', foreground: '#fafafa', cursor: '#0070f3', selectionBackground: 'rgba(0,112,243,0.25)' };
@@ -34,6 +35,11 @@ function formatCommandLabel(command, commandArgs) {
   return args.length > 0 ? `${normalizedCommand} ${args.join(' ')}` : normalizedCommand;
 }
 
+function normalizeTerminalSessionId(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
 export function hideAllTerminals() {
   document.querySelectorAll('.terminal-wrapper').forEach((el) => { el.style.display = 'none'; });
 }
@@ -43,7 +49,7 @@ export function showTerminal(tab) {
 }
 
 export function openTerminalSearch() {
-  if (state.currentItem === 'openclaw') return;
+  if (isChatItemId(state.currentItem)) return;
 
   const active = resolveActiveProjectTab();
   if (!active || !active.searchAddon) return;
@@ -123,13 +129,18 @@ export async function createTerminal({
   type,
   command,
   commandArgs = [],
+  captureExecution = null,
   project,
+  visible = true,
+  terminalSessionId = '',
+  terminalRequest = null,
+  keepAliveOnCleanup = false,
   onExit,
   onRestart,
   onOutput,
 }) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'terminal-wrapper active';
+  wrapper.className = visible ? 'terminal-wrapper active' : 'terminal-wrapper';
   wrapper.id = `term-${tabId}`;
   document.getElementById('terminal-container').appendChild(wrapper);
 
@@ -144,42 +155,51 @@ export async function createTerminal({
   setTimeout(() => fitAddon.fit(), 100);
 
   let termId = null;
+  let activeSessionId = normalizeTerminalSessionId(terminalSessionId);
+  let sessionMeta = null;
+  const isCapturedExecution = !!(captureExecution && typeof captureExecution === 'object');
   const normalizedCommand = normalizeCommand(command);
   const normalizedCommandArgs = normalizeCommandArgs(commandArgs);
   const label = formatCommandLabel(normalizedCommand || type, normalizedCommandArgs) || type || 'shell';
   let spawnError = '';
+  const requestPayload = terminalRequest && typeof terminalRequest === 'object' ? terminalRequest : {};
 
-  if (normalizedCommand) {
-    const result = await window.tgclaw.spawnCommand({
-      command: normalizedCommand,
-      args: normalizedCommandArgs,
-      cwd: project.cwd,
+  if (activeSessionId) {
+    const attachResult = await window.tgclaw.attachTerminalSession({
+      terminalSessionId: activeSessionId,
       cols: term.cols,
       rows: term.rows,
     });
-    if (result && typeof result === 'object' && typeof result.error === 'string') {
-      spawnError = result.error;
+    if (attachResult && typeof attachResult === 'object' && typeof attachResult.error === 'string') {
+      spawnError = attachResult.error;
     } else {
-      termId = result;
-    }
-  } else if (type === 'shell' || !type) {
-    const result = await window.tgclaw.createPty({ cols: term.cols, rows: term.rows, cwd: project.cwd });
-    if (result && typeof result === 'object' && typeof result.error === 'string') {
-      spawnError = result.error;
-    } else {
-      termId = result;
+      sessionMeta = attachResult;
+      activeSessionId = normalizeTerminalSessionId(attachResult?.terminalSessionId || activeSessionId);
     }
   } else {
-    const result = await window.tgclaw.spawnAgent({ type, cwd: project.cwd, cols: term.cols, rows: term.rows });
-    if (result && typeof result === 'object' && typeof result.error === 'string') {
-      spawnError = result.error;
+    const requestArgs = normalizeCommandArgs(requestPayload.args);
+    const requestCommand = normalizeCommand(requestPayload.command);
+    const startResult = await window.tgclaw.startTerminalSession({
+      requestId: normalizeCommand(requestPayload.requestId),
+      runId: normalizeCommand(requestPayload.runId),
+      projectId: normalizeCommand(requestPayload.projectId) || project.id,
+      cwd: normalizeCommand(requestPayload.cwd) || project.cwd,
+      command: requestCommand || normalizedCommand,
+      args: requestArgs.length > 0 ? requestArgs : normalizedCommandArgs,
+      type: requestCommand || normalizedCommand ? '' : type,
+      env: requestPayload.env && typeof requestPayload.env === 'object' ? requestPayload.env : {},
+      cols: Number.isFinite(requestPayload.cols) ? requestPayload.cols : term.cols,
+      rows: Number.isFinite(requestPayload.rows) ? requestPayload.rows : term.rows,
+      titleHint: normalizeCommand(requestPayload.titleHint),
+      initialInput: typeof requestPayload.initialInput === 'string' ? requestPayload.initialInput : '',
+    });
+    if (startResult && typeof startResult === 'object' && typeof startResult.error === 'string') {
+      spawnError = startResult.error;
     } else {
-      termId = result;
+      sessionMeta = startResult;
+      activeSessionId = normalizeTerminalSessionId(startResult?.terminalSessionId);
+      if (!activeSessionId) spawnError = 'Failed to create terminal session.';
     }
-  }
-
-  if (!spawnError && (termId === null || termId === undefined)) {
-    spawnError = 'Failed to spawn process.';
   }
 
   let cleanupData = () => {};
@@ -189,14 +209,43 @@ export async function createTerminal({
   let cleanupRestart = () => {};
   let lastActivityAt = Date.now();
   const outputBuffer = [];
-  if (!spawnError) {
-    cleanupData = window.tgclaw.onPtyData(termId, (data) => {
+  if (isCapturedExecution) {
+    const capturedSessionId = normalizeTerminalSessionId(captureExecution.sessionId);
+    const captureId = normalizeTerminalSessionId(captureExecution.captureId)
+      || (capturedSessionId ? `external:${capturedSessionId}` : normalizeTerminalSessionId(activeSessionId));
+    activeSessionId = captureId || activeSessionId;
+    const captureCommand = formatCommandLabel(captureExecution.command, captureExecution.args);
+    const captureStatus = normalizeCommand(captureExecution.status) || 'running';
+    const captureLines = [
+      '\x1b[36m[Captured external execution]\x1b[0m',
+      `Command: ${captureCommand || label}`,
+      `Project: ${project.cwd}`,
+      `Workdir: ${normalizeCommand(captureExecution.cwd) || project.cwd}`,
+      capturedSessionId ? `Session: ${capturedSessionId}` : '',
+      Number.isInteger(captureExecution.pid) ? `PID: ${captureExecution.pid}` : '',
+      `Status: ${captureStatus}`,
+      '',
+    ].filter(Boolean);
+    const captureHeader = `${captureLines.join('\r\n')}\r\n`;
+    outputBuffer.push(captureHeader);
+    term.write(captureHeader);
+    if (typeof captureExecution.output === 'string' && captureExecution.output.trim()) {
+      const body = `${captureExecution.output.trimEnd()}\r\n`;
+      outputBuffer.push(body);
+      term.write(body);
+    }
+    if (typeof onOutput === 'function') onOutput();
+  } else if (!spawnError) {
+    cleanupData = window.tgclaw.onTerminalSessionData(activeSessionId, (data) => {
       lastActivityAt = Date.now();
       outputBuffer.push(data);
       term.write(data);
       if (typeof onOutput === 'function') onOutput();
     });
-    cleanupExit = window.tgclaw.onPtyExit(termId, (code) => {
+    cleanupExit = window.tgclaw.onTerminalSessionExit(activeSessionId, (payload) => {
+      const code = Number.isInteger(payload?.exitCode)
+        ? payload.exitCode
+        : (Number.isInteger(payload) ? payload : 0);
       cleanupInput();
       term.write(`\r\n\x1b[90m[Process exited with code ${code}]\x1b[0m\r\n`);
       term.write('\r\n\x1b[36mPress Enter to restart...\x1b[0m\r\n');
@@ -207,31 +256,44 @@ export async function createTerminal({
         }
       });
       cleanupRestart = () => restartDisposable.dispose();
+      const sessionLabel = formatCommandLabel(sessionMeta?.command, sessionMeta?.args);
       window.tgclaw.notifyProcessExit({
-        agentType: label || type,
+        agentType: sessionLabel || label || type,
         projectName: project.name,
         exitCode: code,
       });
-      onExit(code);
+      if (typeof onExit === 'function') onExit(code);
     });
     const inputDisposable = term.onData((data) => {
       lastActivityAt = Date.now();
-      window.tgclaw.writePty(termId, data);
+      window.tgclaw.writeTerminalSession(activeSessionId, data);
     });
     cleanupInput = () => inputDisposable.dispose();
-    const resizeDisposable = term.onResize(({ cols, rows }) => window.tgclaw.resizePty(termId, cols, rows));
+    const resizeDisposable = term.onResize(({ cols, rows }) => window.tgclaw.resizeTerminalSession(activeSessionId, cols, rows));
     cleanupResize = () => resizeDisposable.dispose();
+
+    const recentOutput = typeof sessionMeta?.recentOutput === 'string' ? sessionMeta.recentOutput : '';
+    if (recentOutput) {
+      outputBuffer.push(recentOutput);
+      term.write(recentOutput);
+      if (typeof onOutput === 'function') onOutput();
+    }
   } else {
     term.write(`\r\n\x1b[31m${spawnError}\x1b[0m\r\n`);
-    onExit(1);
+    if (typeof onExit === 'function') onExit(1);
   }
 
   return {
     termId,
+    terminalSessionId: activeSessionId,
+    pid: isCapturedExecution && Number.isInteger(captureExecution.pid)
+      ? captureExecution.pid
+      : (sessionMeta?.pid ?? null),
+    sessionMeta,
     term,
     fitAddon,
     searchAddon,
-    exited: Boolean(spawnError),
+    exited: isCapturedExecution ? captureExecution.exited === true : Boolean(spawnError),
     lastActivityAt,
     wrapperEl: wrapper,
     getOutput: () => outputBuffer.join(''),
@@ -240,9 +302,11 @@ export async function createTerminal({
       cleanupData();
       cleanupExit();
       cleanupInput();
-      cleanupResize();
-      cleanupRestart();
-      if (typeof termId === 'number') {
+    cleanupResize();
+    cleanupRestart();
+      if (!isCapturedExecution && !keepAliveOnCleanup && activeSessionId) {
+        window.tgclaw.killTerminalSession(activeSessionId);
+      } else if (!isCapturedExecution && !keepAliveOnCleanup && typeof termId === 'number') {
         window.tgclaw.killPty(termId);
       }
       term.dispose();

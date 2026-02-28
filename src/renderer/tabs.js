@@ -42,6 +42,21 @@ function normalizeCommandType(type, command) {
   return normalizedCommand || type;
 }
 
+function normalizeTerminalSessionId(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function findTabBySessionId(terminalSessionId) {
+  const sessionId = normalizeTerminalSessionId(terminalSessionId);
+  if (!sessionId) return null;
+  for (const [projectId, projectTabs] of Object.entries(state.tabs)) {
+    const matched = (projectTabs || []).find((tab) => normalizeTerminalSessionId(tab.terminalSessionId) === sessionId);
+    if (matched) return { projectId, tab: matched };
+  }
+  return null;
+}
+
 function shouldSelectProject(projectId) {
   return typeof projectId === 'string' && projectId.trim();
 }
@@ -75,6 +90,7 @@ export function onTabRenameKeydown(event, projectId, tabId) {
   }
 }
 export function renderTabs(projectId) {
+  if (state.currentItem !== projectId) return;
   const projectTabs = state.tabs[projectId] || [];
   const active = state.activeTab[projectId];
   const tabList = document.getElementById('tab-list');
@@ -138,8 +154,31 @@ export async function addAgentTab(type, options = {}) {
   const targetProjectId = shouldSelectProject(options.projectId) ? options.projectId : state.currentItem;
   const project = state.projects.find((item) => item.id === targetProjectId);
   if (!project) return;
-  const command = normalizeCommand(options.command);
-  const commandArgs = normalizeCommandArgs(options.commandArgs);
+
+  const terminalRequest = options.terminalRequest && typeof options.terminalRequest === 'object'
+    ? options.terminalRequest
+    : null;
+  const captureExecution = options.captureExecution && typeof options.captureExecution === 'object'
+    ? options.captureExecution
+    : null;
+  const requestCommand = normalizeCommand(terminalRequest?.command);
+  const requestArgs = normalizeCommandArgs(terminalRequest?.args);
+  const command = normalizeCommand(options.command) || requestCommand;
+  const commandArgs = normalizeCommandArgs(options.commandArgs).length > 0
+    ? normalizeCommandArgs(options.commandArgs)
+    : requestArgs;
+  const requestedSessionId = normalizeTerminalSessionId(options.terminalSessionId || terminalRequest?.terminalSessionId);
+  const existing = findTabBySessionId(requestedSessionId);
+  if (existing) {
+    state.currentItem = existing.projectId;
+    state.activeTab[existing.projectId] = existing.tab.id;
+    renderTabs(existing.projectId);
+    deps.renderProjects();
+    deps.updateWindowTitle();
+    return existing.tab;
+  }
+
+  const isActiveProject = state.currentItem === project.id;
   const tabType = normalizeCommandType(type, command);
 
   const tabId = `tab-${Date.now()}`;
@@ -149,7 +188,12 @@ export async function addAgentTab(type, options = {}) {
     type: tabType,
     command,
     commandArgs,
+    captureExecution,
+    terminalSessionId: requestedSessionId,
+    terminalRequest,
+    keepAliveOnCleanup: options.keepAliveOnCleanup === true,
     project,
+    visible: isActiveProject,
     onOutput: () => onProjectOutput(project.id),
     onExit: () => {
       const tab = (state.tabs[project.id] || []).find((item) => item.id === tabId);
@@ -167,10 +211,15 @@ export async function addAgentTab(type, options = {}) {
       });
     },
   });
-  state.tabs[project.id].push({ id: tabId, type: tabType, customName: '', ...terminal });
+  const tabRecord = {
+    id: tabId,
+    type: tabType,
+    customName: '',
+    terminalSessionId: normalizeTerminalSessionId(terminal?.terminalSessionId || requestedSessionId),
+    ...terminal,
+  };
+  state.tabs[project.id].push(tabRecord);
   state.activeTab[project.id] = tabId;
-
-  const isActiveProject = state.currentItem === project.id;
   if (isActiveProject) {
     renderTabs(project.id);
   }
@@ -179,6 +228,7 @@ export async function addAgentTab(type, options = {}) {
   if (isActiveProject) {
     setTimeout(() => terminal.fitAddon.fit(), 150);
   }
+  return tabRecord;
 }
 export function closeTab(projectId, tabId) {
   const projectTabs = state.tabs[projectId] || [];

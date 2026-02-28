@@ -5,6 +5,7 @@ import { gateway } from './gateway.js';
 import { renderSessions, selectItem } from './sidebar.js';
 import { addAgentTab } from './tabs.js';
 import { appendCachedMessage, ensureChatCacheLoaded, getCachedMessages, getCachedSessions, setCachedMessages } from './chat-cache.js';
+import { isChatItemId } from './utils.js';
 const INITIAL_RESPONSE_TIMEOUT_MS = 12000;
 const STREAM_IDLE_TIMEOUT_MS = 18000;
 const HISTORY_RECOVERY_POLL_MS = 3000;
@@ -34,9 +35,32 @@ const cliLaunchByRun = new Map();
 const MAX_RECURSIVE_SPEC_DEPTH = 3;
 const MAX_COMMAND_TEXT_LENGTH = 8192;
 const COMMAND_SUGGESTION_KEYS = ['command', 'cmd', 'program', 'binary', 'executable'];
+const ENABLE_CHAT_TEXT_COMMAND_FALLBACK = false;
+const MAX_HANDLED_TERMINAL_REQUESTS = 400;
+const handledTerminalRequestKeys = [];
+const handledTerminalRequestSet = new Set();
+const MAX_CAPTURED_EXTERNAL_EXECUTIONS = 400;
+const pendingExternalExecCalls = new Map();
+const capturedExternalExecutionKeys = [];
+const capturedExternalExecutionSet = new Set();
 
 function trimToString(value) {
   return typeof value === 'string' ? value.trim() : '';
+}
+
+function normalizeExternalAgentType(command) {
+  const normalized = trimToString(command);
+  if (!normalized) return 'shell';
+  const segments = normalized.split(/[\\/]/);
+  const binary = segments[segments.length - 1].toLowerCase();
+  if (binary === 'claude') return 'claude-code';
+  if (binary === 'codex') return 'codex';
+  if (binary === 'opencode') return 'opencode';
+  if (binary === 'gemini') return 'gemini';
+  if (binary === 'kimi') return 'kimi';
+  if (binary === 'goose') return 'goose';
+  if (binary === 'aider') return 'aider';
+  return 'shell';
 }
 
 function parseCommandArgs(value) {
@@ -64,6 +88,159 @@ function parseCommandStringWithArgs(value) {
 
   if (parts.length === 0) return { command: '', args: [] };
   return { command: parts[0], args: parts.slice(1) };
+}
+
+function normalizeToolArguments(value) {
+  if (!value) return {};
+  if (value && typeof value === 'object') return value;
+  if (typeof value !== 'string') return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseExternalExecToolCalls(message) {
+  if (!message || typeof message !== 'object') return [];
+  if (!Array.isArray(message.content)) return [];
+
+  return message.content
+    .map((item) => {
+      const type = trimToString(item?.type).toLowerCase();
+      if (!['toolcall', 'tool_call', 'tooluse', 'tool_use'].includes(type)) return null;
+      const name = trimToString(item?.name || item?.toolName).toLowerCase();
+      if (name !== 'exec') return null;
+
+      const toolCallId = trimToString(item?.id || item?.toolCallId || item?.tool_use_id);
+      const args = normalizeToolArguments(item?.arguments);
+      const commandText = trimToString(args.command);
+      const parsed = parseCommandStringWithArgs(commandText);
+      const command = trimToString(parsed.command);
+      if (!command) return null;
+
+      return {
+        toolCallId,
+        command,
+        args: parseCommandArgs(parsed.args),
+        cwd: normalizeProjectPath(trimToString(args.workdir || args.cwd)),
+        rawCommand: commandText,
+      };
+    })
+    .filter(Boolean);
+}
+
+function parseExternalExecToolResult(message) {
+  if (!message || typeof message !== 'object') return null;
+  const role = trimToString(message.role).toLowerCase();
+  if (role !== 'toolresult') return null;
+  const toolName = trimToString(message.toolName || message.name).toLowerCase();
+  if (toolName !== 'exec') return null;
+
+  const text = extractMessageContent(message);
+  const details = message.details && typeof message.details === 'object' ? message.details : {};
+  const sessionMatch = typeof text === 'string' ? text.match(/session\s+([a-z0-9._:-]+)/i) : null;
+  const pidMatch = typeof text === 'string' ? text.match(/pid\s+(\d+)/i) : null;
+  const exitMatch = typeof text === 'string' ? text.match(/exited with code\s+(-?\d+)/i) : null;
+
+  const sessionId = trimToString(details.sessionId || (sessionMatch ? sessionMatch[1] : ''));
+  const pidCandidate = Number(details.pid);
+  const pid = Number.isInteger(pidCandidate) && pidCandidate > 0
+    ? pidCandidate
+    : (pidMatch ? Number(pidMatch[1]) : null);
+  const exitCandidate = Number(details.exitCode);
+  const exitCode = Number.isInteger(exitCandidate)
+    ? exitCandidate
+    : (exitMatch ? Number(exitMatch[1]) : null);
+
+  return {
+    toolCallId: trimToString(message.toolCallId || message.tool_call_id),
+    sessionId,
+    pid: Number.isInteger(pid) ? pid : null,
+    exitCode: Number.isInteger(exitCode) ? exitCode : null,
+    output: text,
+  };
+}
+
+function trimCapturedExternalExecutionKeys() {
+  while (capturedExternalExecutionKeys.length > MAX_CAPTURED_EXTERNAL_EXECUTIONS) {
+    const removed = capturedExternalExecutionKeys.shift();
+    if (!removed) continue;
+    capturedExternalExecutionSet.delete(removed);
+  }
+}
+
+function rememberCapturedExternalExecution(key) {
+  if (!key || capturedExternalExecutionSet.has(key)) return;
+  capturedExternalExecutionSet.add(key);
+  capturedExternalExecutionKeys.push(key);
+  trimCapturedExternalExecutionKeys();
+}
+
+function capturedExecutionKey(result) {
+  if (result?.sessionId) return `session:${result.sessionId}`;
+  if (result?.toolCallId) return `tool:${result.toolCallId}`;
+  if (Number.isInteger(result?.pid)) return `pid:${result.pid}`;
+  return '';
+}
+
+async function launchCapturedExternalExecution(toolCall, result) {
+  if (!toolCall || !result) return;
+
+  const key = capturedExecutionKey(result);
+  if (key && capturedExternalExecutionSet.has(key)) return;
+
+  const project = resolveProjectForCliSpec({
+    projectId: '',
+    cwd: toolCall.cwd,
+    projectPath: toolCall.cwd,
+  });
+  if (!project) return;
+
+  const externalSessionId = result.sessionId ? `external:${result.sessionId}` : `external:${Date.now()}`;
+  const type = normalizeExternalAgentType(toolCall.command);
+  const statusText = Number.isInteger(result.exitCode)
+    ? `completed (exit ${result.exitCode})`
+    : 'running';
+
+  await addAgentTab(type, {
+    projectId: project.id,
+    terminalSessionId: externalSessionId,
+    captureExecution: {
+      source: 'openclaw-exec',
+      sessionId: result.sessionId,
+      pid: result.pid,
+      command: toolCall.command,
+      args: toolCall.args,
+      cwd: toolCall.cwd || project.cwd,
+      status: statusText,
+      output: result.output || '',
+      exited: Number.isInteger(result.exitCode),
+      exitCode: Number.isInteger(result.exitCode) ? result.exitCode : null,
+    },
+  });
+
+  rememberCapturedExternalExecution(key || `fallback:${externalSessionId}`);
+  pendingExternalExecCalls.delete(toolCall.toolCallId);
+  if (isChatItemId(state.currentItem)) selectItem(project.id);
+}
+
+function captureExternalExecutionEvidence(frame) {
+  const message = frame?.message;
+  if (!message || typeof message !== 'object') return;
+
+  const toolCalls = parseExternalExecToolCalls(message);
+  toolCalls.forEach((call) => {
+    if (!call.toolCallId) return;
+    pendingExternalExecCalls.set(call.toolCallId, call);
+  });
+
+  const result = parseExternalExecToolResult(message);
+  if (!result || !result.toolCallId) return;
+  const toolCall = pendingExternalExecCalls.get(result.toolCallId);
+  if (!toolCall) return;
+  void launchCapturedExternalExecution(toolCall, result);
 }
 
 function extractCommandSpecFromText(value) {
@@ -208,7 +385,7 @@ async function spawnCliFromGatewayFrame(frame, runKey) {
 
   const project = resolveProjectForCliSpec(spec);
   if (!project) {
-    if (state.currentItem === 'openclaw') {
+    if (isChatItemId(state.currentItem)) {
       appendMessage('Failed to auto-launch CLI from chat: no project context found.', 'from-bot message-error');
     }
     return;
@@ -234,6 +411,155 @@ function clearCliLaunchStateByRun(runKey) {
 
 function clearAllCliLaunchState() {
   cliLaunchByRun.clear();
+}
+
+function trimHandledTerminalRequestKeys() {
+  while (handledTerminalRequestKeys.length > MAX_HANDLED_TERMINAL_REQUESTS) {
+    const removed = handledTerminalRequestKeys.shift();
+    if (!removed) continue;
+    handledTerminalRequestSet.delete(removed);
+  }
+}
+
+function rememberHandledTerminalRequest(key) {
+  if (!key || handledTerminalRequestSet.has(key)) return;
+  handledTerminalRequestSet.add(key);
+  handledTerminalRequestKeys.push(key);
+  trimHandledTerminalRequestKeys();
+}
+
+function terminalRequestKey(payload) {
+  const requestId = trimToString(payload?.requestId);
+  if (requestId) return `request:${requestId}`;
+  const runId = trimToString(payload?.runId) || 'norun';
+  const command = trimToString(payload?.command) || 'shell';
+  const args = parseCommandArgs(payload?.args).join('\u001F');
+  const project = trimToString(payload?.projectId) || normalizeProjectPath(payload?.cwd) || 'noproject';
+  return `run:${runId}:${project}:${command}:${args}`;
+}
+
+function normalizeTerminalStartPayload(payload) {
+  if (!payload || typeof payload !== 'object') return null;
+  const args = parseCommandArgs(payload.args);
+  const cols = Number(payload.cols);
+  const rows = Number(payload.rows);
+  return {
+    requestId: trimToString(payload.requestId),
+    runId: trimToString(payload.runId),
+    projectId: trimToString(payload.projectId),
+    cwd: normalizeProjectPath(trimToString(payload.cwd)),
+    command: trimToString(payload.command),
+    args,
+    titleHint: trimToString(payload.titleHint),
+    env: payload.env && typeof payload.env === 'object' ? payload.env : {},
+    cols: Number.isFinite(cols) ? cols : undefined,
+    rows: Number.isFinite(rows) ? rows : undefined,
+    autoAttach: payload.autoAttach !== false,
+    initialInput: typeof payload.initialInput === 'string' ? payload.initialInput : '',
+    terminalSessionId: trimToString(payload.terminalSessionId),
+  };
+}
+
+async function notifyGatewayTerminalRequestStarted(request, terminalSession) {
+  const terminalSessionId = trimToString(terminalSession?.terminalSessionId);
+  if (!terminalSessionId || !gateway.connected) return;
+  try {
+    await gateway.send('terminal.request.started', {
+      requestId: request.requestId || undefined,
+      runId: request.runId || undefined,
+      terminalSessionId,
+      pid: Number.isInteger(terminalSession?.pid) ? terminalSession.pid : undefined,
+      projectId: request.projectId || undefined,
+    });
+  } catch {
+    // no-op
+  }
+}
+
+async function notifyGatewayTerminalRequestFailed(request, reason, message) {
+  if (!gateway.connected) return;
+  try {
+    await gateway.send('terminal.request.failed', {
+      requestId: request.requestId || undefined,
+      runId: request.runId || undefined,
+      reason: trimToString(reason) || 'start_failed',
+      message: trimToString(message) || 'Terminal start failed',
+    });
+  } catch {
+    // no-op
+  }
+}
+
+function resolveProjectForTerminalRequest(request) {
+  return resolveProjectForCliSpec({
+    projectId: request.projectId,
+    cwd: request.cwd,
+    projectPath: request.cwd,
+  });
+}
+
+async function startTerminalFromGatewayRequest(request) {
+  const key = terminalRequestKey(request);
+  if (handledTerminalRequestSet.has(key)) return;
+
+  const project = resolveProjectForTerminalRequest(request);
+  if (!project) {
+    rememberHandledTerminalRequest(key);
+    if (isChatItemId(state.currentItem)) {
+      appendMessage('Failed to start terminal from gateway request: no project found.', 'from-bot message-error');
+    }
+    await notifyGatewayTerminalRequestFailed(request, 'project_not_found', 'No matching project for terminal request');
+    return;
+  }
+
+  try {
+    const tab = await addAgentTab(request.command || 'shell', {
+      projectId: project.id,
+      command: request.command,
+      commandArgs: request.args,
+      terminalSessionId: request.terminalSessionId,
+      terminalRequest: {
+        ...request,
+        projectId: request.projectId || project.id,
+        cwd: request.cwd || project.cwd,
+      },
+    });
+    rememberHandledTerminalRequest(key);
+    if (request.autoAttach) {
+      selectItem(project.id);
+    }
+    await notifyGatewayTerminalRequestStarted(request, tab);
+  } catch (error) {
+    rememberHandledTerminalRequest(key);
+    const message = error instanceof Error ? error.message : 'Terminal start failed';
+    if (isChatItemId(state.currentItem)) {
+      appendMessage(`Failed to start terminal: ${message}`, 'from-bot message-error');
+    }
+    await notifyGatewayTerminalRequestFailed(request, 'start_failed', message);
+  }
+}
+
+function handleGatewayEventFrame(frame) {
+  if (!frame || typeof frame !== 'object') return;
+  if (frame.event === 'terminal.request.start') {
+    const request = normalizeTerminalStartPayload(frame.payload);
+    if (!request) return;
+    void startTerminalFromGatewayRequest(request);
+    return;
+  }
+  if (frame.event === 'terminal.request.started') {
+    const request = normalizeTerminalStartPayload(frame.payload);
+    if (!request || !request.terminalSessionId) return;
+    void startTerminalFromGatewayRequest(request);
+    return;
+  }
+  if (frame.event === 'terminal.request.failed') {
+    const payload = frame.payload && typeof frame.payload === 'object' ? frame.payload : {};
+    const message = trimToString(payload.message) || 'Terminal request failed.';
+    if (isChatItemId(state.currentItem)) {
+      appendMessage(message, 'from-bot message-error');
+    }
+  }
 }
 export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
 function normalizeSessionKeyForGateway(sessionKey) {
@@ -735,12 +1061,14 @@ function formatGatewayErrorMessage(rawMessage) {
   return `${message} Hint: if Claude Code works with the same relay, check OpenClaw provider headers/auth mode (Bearer auth + Claude CLI headers).`;
 }
 function handleGatewayChat(frame) {
+  captureExternalExecutionEvidence(frame);
+
   const eventState = typeof frame?.state === 'string' ? frame.state : '';
   const { key: runKey, sessionKey: frameSessionKey, runId: frameRunId } = streamRunKey(frame);
   const currentSessionKey = normalizeSessionKeyForGateway(state.currentSessionKey || 'default');
   const isCurrentSessionFrame = frameSessionKey === currentSessionKey;
   const runLookupKey = `${frameSessionKey}:${frameRunId || 'anonymous'}`;
-  if (eventState === 'final') {
+  if (ENABLE_CHAT_TEXT_COMMAND_FALLBACK && eventState === 'final') {
     void spawnCliFromGatewayFrame(frame, runLookupKey);
   }
 
@@ -914,6 +1242,7 @@ export function initChat() {
     }
   });
   gateway.on('chat', handleGatewayChat);
+  gateway.on('event', handleGatewayEventFrame);
   gateway.on('connected', (helloPayload) => {
     applyGatewaySessionDefaults(helloPayload);
     gatewayOnline = true;
