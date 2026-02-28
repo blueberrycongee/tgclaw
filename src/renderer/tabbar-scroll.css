@@ -1,0 +1,24 @@
+/* Keep add-tab in the same horizontal scroll strip as tabs. */
+#tabbar {
+  overflow-x: hidden;
+}
+
+#tab-scroll {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-app-region: no-drag;
+}
+
+#tab-scroll #tab-list {
+  min-width: 0;
+  flex: 1 0 auto;
+}
+
+#tab-scroll #add-tab {
+  flex: 0 0 auto;
+}

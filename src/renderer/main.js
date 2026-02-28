@@ -1,6 +1,7 @@
 import './styles.css';
 import './terminal-fullbleed.css';
 import './chat-inputbar-flat.css';
+import './tabbar-scroll.css';
 import { state } from './state.js';
 import { copyTextToClipboard, normalizeProject } from './utils.js';
 import { initStaticIcons } from './icons.js';
