@@ -20,7 +20,7 @@ import {
   switchTab,
   renderTabs,
 } from './tabs.js';
-import { configureChat, initChat } from './chat.js';
+import { configureChat, initChat, reloadChatHistory } from './chat.js';
 import { initSettings } from './settings.js';
 import { configureShortcuts, initShortcutBindings } from './shortcuts.js';
 import { initThemeToggle } from './theme.js';
@@ -35,7 +35,7 @@ import { exportTerminalLog, splitTerminal } from './split.js';
 import { updateWindowTitle } from './title.js';
 
 configureTerminal({ getActiveProjectTab });
-configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWindowTitle });
+configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWindowTitle, reloadChatHistory });
 configureTabs({ renderProjects, updateWindowTitle });
 configureChat({ updateOpenClawBadge });
 configureShortcuts({ addAgentTab, closeTab, switchTab });
@@ -51,10 +51,14 @@ function initQuickLaunchBindings() {
   });
 }
 
+function isChatItem(id) {
+  return id === 'openclaw' || id.startsWith('session:');
+}
+
 function bindGlobalEvents() {
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
-      if (state.currentItem !== 'openclaw') {
+      if (!isChatItem(state.currentItem)) {
         event.preventDefault();
         openTerminalSearch();
       }
@@ -75,7 +79,7 @@ function bindGlobalEvents() {
   });
 
   window.addEventListener('resize', () => {
-    if (state.currentItem === 'openclaw') return;
+    if (isChatItem(state.currentItem)) return;
     const active = state.activeTab[state.currentItem];
     const tab = (state.tabs[state.currentItem] || []).find((item) => item.id === active);
     if (tab?.fitAddon) tab.fitAddon.fit();
