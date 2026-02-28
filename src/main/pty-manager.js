@@ -16,6 +16,33 @@ const agentCommands = {
   aider: { cmd: 'aider', args: [] },
 };
 
+function asStringArray(values) {
+  if (!Array.isArray(values)) return [];
+  return values
+    .map((value) => {
+      if (typeof value === 'string') return value;
+      if (value === null || value === undefined) return '';
+      return String(value);
+    })
+    .filter(Boolean);
+}
+
+function normalizeCommand(command) {
+  if (typeof command !== 'string') return '';
+  return command.trim();
+}
+
+function spawnCommandProcess(command, args = [], cols, rows, cwd) {
+  const normalizedCommand = normalizeCommand(command);
+  return spawnProcess({
+    cmd: normalizedCommand,
+    args: asStringArray(args),
+    cols,
+    rows,
+    cwd,
+  });
+}
+
 function asarVariants(filePath) {
   const variants = [filePath];
   if (filePath.includes('.asar/')) variants.push(filePath.replace('.asar/', '.asar.unpacked/'));
@@ -139,6 +166,21 @@ function registerPtyHandlers(ipcMain) {
     } catch (error) {
       const message = error && error.message ? error.message : String(error);
       return { error: `Failed to spawn "${agent.cmd}": ${message}` };
+    }
+  });
+
+  ipcMain.handle('pty:spawn-command', (event, { command, args = [], cwd, cols, rows }) => {
+    const id = nextTermId++;
+    const normalizedCommand = normalizeCommand(command);
+    try {
+      if (!normalizedCommand) {
+        throw new Error('Command is required');
+      }
+      bindTerminal(event, id, spawnCommandProcess(normalizedCommand, args, cols, rows, cwd));
+      return id;
+    } catch (error) {
+      const message = error && error.message ? error.message : String(error);
+      return { error: `Failed to spawn command "${normalizedCommand || 'unknown'}": ${message}` };
     }
   });
 

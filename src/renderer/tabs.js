@@ -23,6 +23,28 @@ function scheduleProjectListRefresh(projectId) {
 function onProjectOutput(projectId) {
   scheduleProjectListRefresh(projectId);
 }
+function normalizeCommand(command) {
+  if (typeof command !== 'string') return '';
+  return command.trim();
+}
+
+function normalizeCommandArgs(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === 'string') return item;
+    if (item == null) return '';
+    return String(item);
+  }).filter(Boolean);
+}
+
+function normalizeCommandType(type, command) {
+  const normalizedCommand = normalizeCommand(command);
+  return normalizedCommand || type;
+}
+
+function shouldSelectProject(projectId) {
+  return typeof projectId === 'string' && projectId.trim();
+}
 export function getTabDisplayName(tab) { return tab.customName || agentLabel(tab.type); }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
 export function onTabTitleDoubleClick(event, projectId, tabId) {
@@ -111,15 +133,22 @@ export function getActiveProjectTab(projectId = state.currentItem) {
   const active = state.activeTab[projectId];
   return (state.tabs[projectId] || []).find((tab) => tab.id === active) || null;
 }
-export async function addAgentTab(type) {
+export async function addAgentTab(type, options = {}) {
   hideAgentPicker();
-  const project = state.projects.find((item) => item.id === state.currentItem);
+  const targetProjectId = shouldSelectProject(options.projectId) ? options.projectId : state.currentItem;
+  const project = state.projects.find((item) => item.id === targetProjectId);
   if (!project) return;
+  const command = normalizeCommand(options.command);
+  const commandArgs = normalizeCommandArgs(options.commandArgs);
+  const tabType = normalizeCommandType(type, command);
+
   const tabId = `tab-${Date.now()}`;
   if (!state.tabs[project.id]) state.tabs[project.id] = [];
   const terminal = await createTerminal({
     tabId,
-    type,
+    type: tabType,
+    command,
+    commandArgs,
     project,
     onOutput: () => onProjectOutput(project.id),
     onExit: () => {
@@ -131,10 +160,14 @@ export async function addAgentTab(type) {
     },
     onRestart: () => {
       closeTab(project.id, tabId);
-      addAgentTab(type);
+      addAgentTab(type, {
+        command,
+        commandArgs,
+        projectId: project.id,
+      });
     },
   });
-  state.tabs[project.id].push({ id: tabId, type, customName: '', ...terminal });
+  state.tabs[project.id].push({ id: tabId, type: tabType, customName: '', ...terminal });
   state.activeTab[project.id] = tabId;
   renderTabs(project.id);
   deps.renderProjects();

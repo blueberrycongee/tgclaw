@@ -3,6 +3,7 @@ import { addCodeBlockCopyButtons, animateMessageEntry, appendMessage, configureC
 import { state } from './state.js';
 import { gateway } from './gateway.js';
 import { renderSessions, selectItem } from './sidebar.js';
+import { addAgentTab } from './tabs.js';
 import { appendCachedMessage, ensureChatCacheLoaded, getCachedMessages, getCachedSessions, setCachedMessages } from './chat-cache.js';
 const INITIAL_RESPONSE_TIMEOUT_MS = 12000;
 const STREAM_IDLE_TIMEOUT_MS = 18000;
@@ -29,6 +30,211 @@ let historyRecoveryTimer = null;
 let historyRecoveryInFlight = false;
 let lastAssistantActivityAt = 0;
 let pendingChatRequest = null;
+const cliLaunchByRun = new Map();
+const MAX_RECURSIVE_SPEC_DEPTH = 3;
+const MAX_COMMAND_TEXT_LENGTH = 8192;
+const COMMAND_SUGGESTION_KEYS = ['command', 'cmd', 'program', 'binary', 'executable'];
+
+function trimToString(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function parseCommandArgs(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => {
+    if (typeof item === 'string') return item;
+    if (item == null) return '';
+    return String(item);
+  }).filter(Boolean);
+}
+
+function parseCommandStringWithArgs(value) {
+  if (typeof value !== 'string') return { command: '', args: [] };
+  const text = value.trim();
+  if (!text) return { command: '', args: [] };
+
+  const rawParts = text.match(/(?:[^\s"]+|"([^"]*)"|'([^']*)')+/g);
+  if (!rawParts) return { command: text, args: [] };
+
+  const parts = rawParts.map((part) => {
+    if (part.startsWith('"') && part.endsWith('"')) return part.slice(1, -1);
+    if (part.startsWith('\'') && part.endsWith('\'')) return part.slice(1, -1);
+    return part;
+  }).filter(Boolean);
+
+  if (parts.length === 0) return { command: '', args: [] };
+  return { command: parts[0], args: parts.slice(1) };
+}
+
+function extractCommandSpecFromText(value) {
+  const text = trimToString(value);
+  if (!text || text.length > MAX_COMMAND_TEXT_LENGTH) return null;
+  if (!text.startsWith('{') || !text.endsWith('}')) return null;
+  try {
+    const payload = JSON.parse(text);
+    return parseCommandSpecFromValue(payload);
+  } catch {
+    return null;
+  }
+}
+
+function parseCommandSpecFromValue(value, depth = 0) {
+  if (!value || typeof value !== 'object') return null;
+  if (depth > MAX_RECURSIVE_SPEC_DEPTH) return null;
+
+  const command = COMMAND_SUGGESTION_KEYS
+    .map((key) => trimToString(value[key]))
+    .find(Boolean);
+  if (command) {
+    const inlineParts = parseCommandStringWithArgs(command);
+    return {
+      command: inlineParts.command || command,
+      args: inlineParts.args.length > 0
+        ? inlineParts.args
+        : parseCommandArgs(value.args || value.argv || value.params || value.arguments),
+      cwd: trimToString(value.cwd),
+      projectId: trimToString(value.projectId),
+      projectPath: trimToString(value.projectPath),
+      workingDir: trimToString(value.workingDir),
+    };
+  }
+
+  const candidate = trimToString(value.action) || trimToString(value.type) || trimToString(value.name);
+  const action = trimToString(value.exec) || trimToString(value.tool) || trimToString(value.commandSource);
+  const candidateLower = candidate.toLowerCase();
+  if ((candidateLower === 'exec' || candidateLower === 'execute') && action) {
+    const inlineParts = parseCommandStringWithArgs(action);
+    return parseCommandSpecFromValue({
+      command: inlineParts.command || action,
+      args: inlineParts.args.length > 0
+        ? inlineParts.args
+        : value.args || value.argv || value.params || value.arguments,
+      cwd: value.cwd,
+      projectId: value.projectId,
+      projectPath: value.projectPath,
+      workingDir: value.workingDir,
+    }, depth + 1);
+  }
+
+  const nested = value.meta || value.metadata || value.payload || value.data || value.details;
+  if (nested && typeof nested === 'object') {
+    const nestedSpec = parseCommandSpecFromValue(nested, depth + 1);
+    if (nestedSpec) return nestedSpec;
+  }
+
+  const parsedTextSpec = extractCommandSpecFromText(trimToString(value.text) || trimToString(value.content));
+  if (parsedTextSpec) return parsedTextSpec;
+
+  const directJson = trimToString(value.commandJson);
+  if (directJson) {
+    const parsedFromText = extractCommandSpecFromText(directJson);
+    if (parsedFromText) return parsedFromText;
+  }
+
+  return null;
+}
+
+function normalizeProjectPath(value) {
+  const path = trimToString(value);
+  if (!path) return '';
+  return path.replace(/[/\\]+$/, '');
+}
+
+function parseCliLaunchSpec(frame) {
+  const candidates = [
+    frame,
+    frame?.message,
+    frame?.tool,
+    frame?.toolCall,
+    frame?.event,
+    frame?.data,
+    frame?.params,
+    frame?.metadata,
+    frame?.meta,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const spec = parseCommandSpecFromValue(candidate);
+    if (spec) return spec;
+
+    const textSpec = extractCommandSpecFromText(candidate?.text || candidate?.content);
+    if (textSpec) return textSpec;
+  }
+
+  return null;
+}
+
+function normalizeCommandSpecSpecFrame(frame) {
+  if (!frame) return null;
+  const spec = parseCliLaunchSpec(frame);
+  if (!spec || !spec.command) return null;
+  return {
+    command: trimToString(spec.command),
+    args: parseCommandArgs(spec.args),
+    cwd: normalizeProjectPath(trimToString(spec.cwd || spec.workingDir || spec.working_directory || spec.projectPath)),
+    projectId: trimToString(spec.projectId),
+    projectPath: normalizeProjectPath(trimToString(spec.projectPath || spec.directory || spec.projectRoot)),
+  };
+}
+
+function resolveProjectForCliSpec(spec) {
+  if (spec.projectId) {
+    const byId = state.projects.find((project) => project.id === spec.projectId);
+    if (byId) return byId;
+  }
+
+  const targetPaths = [normalizeProjectPath(spec.cwd), normalizeProjectPath(spec.projectPath)]
+    .filter(Boolean);
+  if (targetPaths.length > 0) {
+    const direct = state.projects.find((project) => {
+      const projectCwd = normalizeProjectPath(project.cwd);
+      return targetPaths.includes(projectCwd) || targetPaths.some((path) => projectCwd.startsWith(path));
+    });
+    if (direct) return direct;
+  }
+
+  const currentProject = state.projects.find((project) => project.id === state.currentItem);
+  if (currentProject) return currentProject;
+  return state.projects[0];
+}
+
+async function spawnCliFromGatewayFrame(frame, runKey) {
+  const spec = normalizeCommandSpecSpecFrame(frame);
+  if (!spec) return;
+
+  const dedupeKey = `${runKey}:${spec.command}:${(spec.args || []).join('\u001F')}`;
+  if (cliLaunchByRun.has(dedupeKey)) return;
+  cliLaunchByRun.set(dedupeKey, true);
+
+  const project = resolveProjectForCliSpec(spec);
+  if (!project) {
+    if (state.currentItem === 'openclaw') {
+      appendMessage('Failed to auto-launch CLI from chat: no project context found.', 'from-bot message-error');
+    }
+    return;
+  }
+
+  try {
+    await addAgentTab(spec.command, {
+      command: spec.command,
+      commandArgs: spec.args,
+      projectId: project.id,
+    });
+  } catch {
+    // Keep stream behavior unchanged; terminal creation errors are surfaced in terminal UI.
+  }
+}
+
+function clearCliLaunchStateByRun(runKey) {
+  const prefix = `${runKey}:`;
+  for (const key of cliLaunchByRun.keys()) {
+    if (key.startsWith(prefix)) cliLaunchByRun.delete(key);
+  }
+}
+
+function clearAllCliLaunchState() {
+  cliLaunchByRun.clear();
+}
 export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
 function normalizeSessionKeyForGateway(sessionKey) {
   const key = typeof sessionKey === 'string' && sessionKey.trim() ? sessionKey.trim() : 'default';
@@ -238,6 +444,7 @@ function renderChatHeaderStatus() {
 function resetStreamingState() {
   clearTypingIndicator();
   clearAssistantWatchdogs();
+  clearAllCliLaunchState();
   streamRuns.forEach((run) => {
     if (run.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
   });
@@ -532,6 +739,10 @@ function handleGatewayChat(frame) {
   const { key: runKey, sessionKey: frameSessionKey, runId: frameRunId } = streamRunKey(frame);
   const currentSessionKey = normalizeSessionKeyForGateway(state.currentSessionKey || 'default');
   const isCurrentSessionFrame = frameSessionKey === currentSessionKey;
+  const runLookupKey = `${frameSessionKey}:${frameRunId || 'anonymous'}`;
+  if (eventState === 'final') {
+    void spawnCliFromGatewayFrame(frame, runLookupKey);
+  }
 
   if (isCurrentSessionFrame) {
     touchAssistantActivity();
@@ -610,6 +821,7 @@ function handleGatewayChat(frame) {
       if (run.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
       streamRuns.delete(runKey);
     }
+    clearCliLaunchStateByRun(runLookupKey);
     if (currentRunKey === runKey) currentRunKey = '';
     syncStreamingUiState();
     return;
@@ -645,6 +857,7 @@ function handleGatewayChat(frame) {
     }
     if (run?.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
     streamRuns.delete(runKey);
+    clearCliLaunchStateByRun(runLookupKey);
     if (currentRunKey === runKey) currentRunKey = '';
     syncStreamingUiState();
     return;
@@ -655,6 +868,7 @@ function handleGatewayChat(frame) {
     const run = streamRuns.get(runKey);
     if (run?.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
     streamRuns.delete(runKey);
+    clearCliLaunchStateByRun(runLookupKey);
     if (currentRunKey === runKey) currentRunKey = '';
     if (isCurrentSessionFrame) appendMessage(`Gateway error: ${message}`, 'from-bot message-error');
     syncStreamingUiState();
