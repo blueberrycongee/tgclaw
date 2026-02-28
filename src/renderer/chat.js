@@ -102,12 +102,15 @@ function showTypingIndicator() {
   clearTypingIndicator();
   const container = document.getElementById('chat-messages');
   if (!container) return;
+  const row = document.createElement('div');
+  row.className = 'message-row from-bot typing-row';
   const div = document.createElement('div');
   div.className = 'message from-bot typing-indicator';
   div.innerHTML = '<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>';
-  container.appendChild(div);
-  typingIndicatorDiv = div;
-  animateMessageEntry(div);
+  row.appendChild(div);
+  container.appendChild(row);
+  typingIndicatorDiv = row;
+  animateMessageEntry(row);
   updateEmptyState();
   scrollChatToBottom();
 }
@@ -456,6 +459,14 @@ function mergeIncomingText(currentText, incomingText) {
 
   return `${currentText}${incomingText}`;
 }
+
+function resolveMessageRow(messageElement) {
+  if (!messageElement) return null;
+  const parent = messageElement.parentElement;
+  if (parent?.classList.contains('message-row')) return parent;
+  return messageElement;
+}
+
 function mergeStreamText(currentText, frame) {
   let merged = currentText;
   const directDelta = typeof frame?.delta === 'string' ? frame.delta : '';
@@ -567,13 +578,14 @@ function handleGatewayChat(frame) {
     const finalText = extractFrameText(frame) || extractMessageContent(finalMessage) || run?.text || '';
     if (run?.contentDiv && isCurrentSessionFrame) {
       const runMessage = run.contentDiv.parentElement;
+      const runRow = resolveMessageRow(runMessage);
       if (runMessage) runMessage.classList.remove('is-streaming');
       if (finalText) {
         renderBotMessage(run.contentDiv, finalText);
         addCodeBlockCopyButtons(run.contentDiv);
         scrollChatToBottom();
-      } else if (runMessage) {
-        runMessage.remove();
+      } else if (runRow) {
+        runRow.remove();
       }
     } else if (finalText && isCurrentSessionFrame) {
       appendMessage(finalText, 'from-bot', { createdAt: Date.now() });
@@ -608,13 +620,14 @@ function handleGatewayChat(frame) {
     const abortedText = extractMessageContent(normalizedMessage) || extractFrameText(frame) || run?.text || '';
     if (run?.contentDiv && isCurrentSessionFrame) {
       const runMessage = run.contentDiv.parentElement;
+      const runRow = resolveMessageRow(runMessage);
       if (runMessage) runMessage.classList.remove('is-streaming');
       if (abortedText) {
         renderBotMessage(run.contentDiv, abortedText);
         addCodeBlockCopyButtons(run.contentDiv);
         scrollChatToBottom();
-      } else if (runMessage) {
-        runMessage.remove();
+      } else if (runRow) {
+        runRow.remove();
       }
     } else if (abortedText && isCurrentSessionFrame) {
       appendMessage(abortedText, 'from-bot', { createdAt: Date.now() });
