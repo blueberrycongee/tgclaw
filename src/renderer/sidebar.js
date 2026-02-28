@@ -1,6 +1,7 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { updateEmptyState } from './chat-messages.js';
+import { showInputModal } from './modal.js';
 import { addProject, configureProjects, deleteProject, renameProject } from './projects.js';
 
 const deps = {
@@ -86,7 +87,36 @@ export function renderSessions() {
   list.querySelectorAll('.sidebar-item[data-session-key]').forEach((item) => {
     const sessionKey = item.dataset.sessionKey;
     item.addEventListener('click', () => selectItem(`session:${sessionKey}`));
+    item.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      window.tgclaw.showSessionContextMenu(sessionKey);
+    });
   });
+}
+
+function deleteSession(sessionKey) {
+  const index = state.sessions.findIndex((session) => session?.sessionKey === sessionKey);
+  if (index === -1) return;
+  state.sessions.splice(index, 1);
+  if (state.currentItem === `session:${sessionKey}`) selectItem('openclaw');
+  renderSessions();
+}
+
+async function renameSession(sessionKey) {
+  const session = state.sessions.find((item) => item?.sessionKey === sessionKey);
+  if (!session) return;
+  const input = await showInputModal({
+    title: 'Rename Session',
+    placeholder: 'Enter new name',
+    defaultValue: session.label,
+  });
+  if (input === null) return;
+
+  const nextLabel = input.trim();
+  if (!nextLabel || nextLabel === session.label) return;
+  session.label = nextLabel;
+  renderSessions();
+  if (state.currentItem === `session:${sessionKey}`) deps.updateChatHeader();
 }
 
 function createNewChatSession() {
@@ -117,4 +147,6 @@ export function initSidebarBindings() {
 
   window.tgclaw.onProjectDelete(({ projectId }) => deleteProject(projectId));
   window.tgclaw.onProjectRename(({ projectId }) => void renameProject(projectId));
+  window.tgclaw.onSessionDelete(({ sessionKey }) => deleteSession(sessionKey));
+  window.tgclaw.onSessionRename(({ sessionKey }) => void renameSession(sessionKey));
 }

@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('tgclaw', {
   saveTerminalLog: (text) => ipcRenderer.invoke('terminal:save-log', text),
   openDirectoryDialog: () => ipcRenderer.invoke('dialog:open-directory'),
   showProjectContextMenu: (projectId) => ipcRenderer.send('project:show-context-menu', { projectId }),
+  showSessionContextMenu: (sessionKey) => ipcRenderer.send('session:show-context-menu', { sessionKey }),
   showTabContextMenu: (payload) => ipcRenderer.send('tab:show-context-menu', payload),
   setWindowTitle: (title) => ipcRenderer.send('app:set-title', { title }),
   notifyProcessExit: ({ agentType, projectName, exitCode }) => ipcRenderer.send('notify:process-exit', {
@@ -43,6 +44,8 @@ contextBridge.exposeInMainWorld('tgclaw', {
   },
   onProjectDelete: onIpc('project:delete'),
   onProjectRename: onIpc('project:rename'),
+  onSessionDelete: onIpc('session:delete'),
+  onSessionRename: onIpc('session:rename'),
   onAppShortcut: onIpc('app:shortcut'),
   onTabKill: onIpc('tab:kill'),
   onTabExportLog: onIpc('tab:export-log'),
