@@ -14,6 +14,7 @@ function getProjectTerminalState(projectTabs) {
   const tabs = Array.isArray(projectTabs) ? projectTabs : [];
   return tabs.map((tab) => {
     const lastActivityAt = typeof tab?.getLastActivityAt === 'function' ? Number(tab.getLastActivityAt()) || 0 : 0;
+    const latestActivityAt = lastActivityAt;
     if (tab?.exited) {
       return {
         tabId: tab.id,
