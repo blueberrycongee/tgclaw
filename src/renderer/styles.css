@@ -321,6 +321,66 @@ a:hover {
   gap: var(--spacing-1);
 }
 
+#quick-launch-bar {
+  height: 36px;
+  display: none;
+  align-items: center;
+  gap: var(--spacing-2);
+  padding: 0 var(--spacing-2);
+  background: var(--background-1);
+  border-bottom: 1px solid var(--gray-300);
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.quick-launch-label {
+  font-size: var(--text-xs);
+  color: var(--gray-600);
+  white-space: nowrap;
+  padding: 0 var(--spacing-1);
+}
+
+.quick-agent-btn {
+  height: 24px;
+  padding: 0 var(--spacing-2);
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gray-900);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) ease-out, border-color var(--duration-fast) ease-out, transform var(--duration-press) ease-out;
+  -webkit-app-region: no-drag;
+}
+
+.quick-agent-btn:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-400);
+}
+
+.quick-agent-btn:active {
+  transform: scale(0.98);
+}
+
+.quick-agent-icon {
+  width: 13px;
+  height: 13px;
+  color: var(--gray-600);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.quick-agent-btn:hover .quick-agent-icon {
+  color: var(--gray-900);
+}
+
 .tab {
   height: 32px;
   display: flex;
@@ -860,6 +920,8 @@ a:hover {
 .agent-picker-inner {
   width: min(92vw, 360px);
   padding: var(--spacing-4);
+  max-height: min(82vh, 620px);
+  overflow-y: auto;
 }
 
 .gateway-settings-header {
@@ -1044,6 +1106,10 @@ textarea:focus-visible {
 
   .tab-title {
     max-width: 140px;
+  }
+
+  .quick-launch-label {
+    display: none;
   }
 
   .message {

@@ -13,7 +13,16 @@ export function normalizeProject(project) {
 }
 
 export function agentLabel(type) {
-  const map = { 'claude-code': 'Claude Code', codex: 'Codex', goose: 'Goose', aider: 'Aider', shell: 'Shell' };
+  const map = {
+    'claude-code': 'Claude Code',
+    codex: 'Codex',
+    opencode: 'OpenCode',
+    gemini: 'Gemini CLI',
+    kimi: 'Kimi CLI',
+    goose: 'Goose',
+    aider: 'Aider',
+    shell: 'Shell',
+  };
   return map[type] || type;
 }
 

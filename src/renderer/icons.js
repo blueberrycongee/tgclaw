@@ -79,11 +79,27 @@ const ICON_PATHS = {
     <path d="M14.7 6.3a3.5 3.5 0 0 0 4.9 4.9L13 17.8 9.2 14l5.5-5.5Z"></path>
     <path d="m7.5 15.7-3 3a1.2 1.2 0 1 0 1.7 1.7l3-3"></path>
   `,
+  cube: `
+    <path d="m12 3 7 4v10l-7 4-7-4V7l7-4Z"></path>
+    <path d="m12 3 7 4-7 4-7-4"></path>
+    <path d="M12 11v10"></path>
+  `,
+  star4: `
+    <path d="M12 3.5 14.5 9l5.5 2.5-5.5 2.5-2.5 5.5-2.5-5.5L4 11.5 9.5 9 12 3.5Z"></path>
+  `,
+  orbit: `
+    <circle cx="12" cy="12" r="2.2"></circle>
+    <path d="M12 4c4 0 7.2 2.2 7.2 5s-3.2 5-7.2 5-7.2 2.2-7.2 5"></path>
+    <path d="M12 20c-4 0-7.2-2.2-7.2-5s3.2-5 7.2-5 7.2-2.2 7.2-5"></path>
+  `,
 };
 
 const AGENT_ICON_MAP = {
   'claude-code': 'sparkles',
   codex: 'braces',
+  opencode: 'cube',
+  gemini: 'star4',
+  kimi: 'orbit',
   goose: 'compass',
   aider: 'wrench',
   shell: 'terminal',
@@ -125,8 +141,13 @@ export function initStaticIcons() {
   setElementIcon('chat-send', 'send', { size: 16, className: 'action-glyph' });
   setElementIcon('chat-stop', 'stop', { size: 16, className: 'action-glyph' });
 
-  document.querySelectorAll('[data-agent-icon]').forEach((element) => {
+  document.querySelectorAll('.agent-option-icon[data-agent-icon]').forEach((element) => {
     const agentType = element.getAttribute('data-agent-icon') || '';
     element.innerHTML = renderAgentIcon(agentType, { size: 16, className: 'agent-glyph' });
+  });
+
+  document.querySelectorAll('.quick-agent-icon[data-agent-icon]').forEach((element) => {
+    const agentType = element.getAttribute('data-agent-icon') || '';
+    element.innerHTML = renderAgentIcon(agentType, { size: 14, className: 'quick-agent-glyph' });
   });
 }

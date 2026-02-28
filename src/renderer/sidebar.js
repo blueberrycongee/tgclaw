@@ -34,6 +34,9 @@ export function updateOpenClawBadge() {
 
 export function selectItem(id) {
   state.currentItem = id;
+  const tabbar = document.getElementById('tabbar');
+  const quickLaunchBar = document.getElementById('quick-launch-bar');
+  const chatPanel = document.getElementById('chat-panel');
   document.querySelectorAll('.sidebar-item').forEach((el) => {
     el.classList.toggle('active', el.dataset.id === id);
   });
@@ -41,13 +44,15 @@ export function selectItem(id) {
   if (id === 'openclaw') {
     state.unreadCount = 0;
     updateOpenClawBadge();
-    document.getElementById('tabbar').style.display = 'none';
-    document.getElementById('chat-panel').classList.add('active');
+    if (tabbar) tabbar.style.display = 'none';
+    if (quickLaunchBar) quickLaunchBar.style.display = 'none';
+    if (chatPanel) chatPanel.classList.add('active');
     deps.closeTerminalSearch();
     deps.hideAllTerminals();
   } else {
-    document.getElementById('tabbar').style.display = 'flex';
-    document.getElementById('chat-panel').classList.remove('active');
+    if (tabbar) tabbar.style.display = 'flex';
+    if (quickLaunchBar) quickLaunchBar.style.display = 'flex';
+    if (chatPanel) chatPanel.classList.remove('active');
     deps.renderTabs(id);
   }
 

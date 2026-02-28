@@ -41,6 +41,16 @@ configureChat({ updateOpenClawBadge });
 configureShortcuts({ addAgentTab, closeTab, switchTab });
 initStaticIcons();
 
+function initQuickLaunchBindings() {
+  document.querySelectorAll('.quick-agent-btn[data-agent-type]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const type = button.dataset.agentType;
+      if (!type || state.currentItem === 'openclaw') return;
+      void addAgentTab(type);
+    });
+  });
+}
+
 function bindGlobalEvents() {
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'f') {
@@ -112,6 +122,7 @@ async function initProjects() {
 }
 
 initSidebarBindings();
+initQuickLaunchBindings();
 initAgentPicker();
 initShortcutBindings();
 bindTerminalSearchEvents();
