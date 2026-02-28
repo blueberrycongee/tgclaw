@@ -1,4 +1,4 @@
-import { gateway } from './gateway.js';
+import { nodeGateway } from './gateway.js';
 import { state } from './state.js';
 import { addAgentTab } from './tabs.js';
 
@@ -56,14 +56,14 @@ async function handleExecApprovalsGet(requestId, nodeId) {
   try {
     const file = loadExecApprovals();
     const hash = hashExecApprovals(file);
-    await gateway.nodeInvokeResult(requestId, nodeId, true, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, true, {
       path: 'localStorage:' + EXEC_APPROVALS_KEY,
       exists: true,
       hash,
       file,
     }, null);
   } catch (err) {
-    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'INTERNAL_ERROR',
       message: err instanceof Error ? err.message : String(err),
     });
@@ -74,7 +74,7 @@ async function handleExecApprovalsSet(requestId, nodeId, paramsJSON) {
   try {
     const params = typeof paramsJSON === 'string' ? JSON.parse(paramsJSON) : paramsJSON;
     if (!params || !params.file || typeof params.file !== 'object') {
-      await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+      await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
         code: 'INVALID_REQUEST',
         message: 'exec approvals file required',
       });
@@ -85,7 +85,7 @@ async function handleExecApprovalsSet(requestId, nodeId, paramsJSON) {
     const currentHash = hashExecApprovals(currentFile);
 
     if (params.baseHash && params.baseHash !== currentHash) {
-      await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+      await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
         code: 'CONFLICT',
         message: `exec approvals modified (expected ${params.baseHash}, got ${currentHash})`,
       });
@@ -96,14 +96,14 @@ async function handleExecApprovalsSet(requestId, nodeId, paramsJSON) {
     saveExecApprovals(newFile);
     const newHash = hashExecApprovals(newFile);
 
-    await gateway.nodeInvokeResult(requestId, nodeId, true, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, true, {
       path: 'localStorage:' + EXEC_APPROVALS_KEY,
       exists: true,
       hash: newHash,
       file: newFile,
     }, null);
   } catch (err) {
-    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'INTERNAL_ERROR',
       message: err instanceof Error ? err.message : String(err),
     });
@@ -190,7 +190,7 @@ async function handleSystemRun(request) {
   }
 
   if (command !== 'system.run') {
-    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'UNSUPPORTED_COMMAND',
       message: `Unsupported command: ${command}`,
     });
@@ -199,7 +199,7 @@ async function handleSystemRun(request) {
 
   const params = parseSystemRunParams(paramsJSON);
   if (!params || !params.command) {
-    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'INVALID_PARAMS',
       message: 'Missing required command parameter',
     });
@@ -211,7 +211,7 @@ async function handleSystemRun(request) {
   const project = resolveProjectForCwd(params.cwd);
 
   if (!project) {
-    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'NO_PROJECT',
       message: 'No project found for the specified working directory',
     });
@@ -242,7 +242,7 @@ async function handleSystemRun(request) {
       command: params.command,
     });
 
-    await gateway.nodeInvokeResult(requestId, nodeId, true, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, true, {
       status: 'started',
       terminalSessionId,
       projectId: project.id,
@@ -250,7 +250,7 @@ async function handleSystemRun(request) {
     }, null);
 
   } catch (err) {
-    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
+    await nodeGateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'LAUNCH_FAILED',
       message: err instanceof Error ? err.message : String(err),
     });
@@ -258,7 +258,7 @@ async function handleSystemRun(request) {
 }
 
 export function setupSystemRunHandler() {
-  gateway.on('node.invoke.request', (payload) => {
+  nodeGateway.on('node.invoke.request', (payload) => {
     void handleSystemRun(payload);
   });
 }

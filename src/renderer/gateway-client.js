@@ -1,9 +1,7 @@
 import { buildDeviceAuthSignature, randomId } from './gateway-identity.js';
-const PROTOCOL_VERSION = 3, CLIENT_ID = 'node-host';
-const CLIENT_MODE = 'node';
+const PROTOCOL_VERSION = 3;
 const CLIENT_VERSION = '1.0.0';
 const CLIENT_PLATFORM = 'electron', CLIENT_DEVICE_FAMILY = 'desktop';
-const DEFAULT_ROLE = 'node';
 const DEFAULT_SCOPES = ['operator.admin', 'operator.read', 'operator.write'];
 const DEFAULT_NODE_COMMANDS = ['system.run', 'system.execApprovals.get', 'system.execApprovals.set'];
 const RECONNECT_DELAY_MS = 5000;
@@ -15,7 +13,7 @@ function buildError(message, code, details) {
   return error;
 }
 class GatewayClient {
-  constructor(defaultUrl = '') {
+  constructor(defaultUrl = '', options = {}) {
     this.defaultUrl = defaultUrl;
     this.url = defaultUrl;
     this.token = '';
@@ -32,6 +30,10 @@ class GatewayClient {
     this.handshakePromise = null;
     this.protocolVersion = PROTOCOL_VERSION;
     this.enableDeviceSignature = true;
+    this.role = options.role || 'operator';
+    this.clientId = options.clientId || 'tgclaw';
+    this.clientMode = options.clientMode || 'operator';
+    this.commands = options.commands || [];
   }
   connect(url = this.defaultUrl, token = '') {
     this.url = typeof url === 'string' && url ? url : this.defaultUrl;
@@ -153,18 +155,20 @@ class GatewayClient {
   }
   async _buildConnectParams(nonce, protocolVersion = this.protocolVersion) {
     const token = this.token.trim();
-    const role = DEFAULT_ROLE;
+    const role = this.role;
     const scopes = [...DEFAULT_SCOPES];
     const params = {
       minProtocol: protocolVersion,
       maxProtocol: protocolVersion,
-      client: { id: CLIENT_ID, displayName: 'TGClaw', version: CLIENT_VERSION, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY, mode: CLIENT_MODE },
+      client: { id: this.clientId, displayName: 'TGClaw', version: CLIENT_VERSION, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY, mode: this.clientMode },
       role,
       scopes,
-      commands: [...DEFAULT_NODE_COMMANDS],
     };
+    if (this.commands.length > 0) {
+      params.commands = [...this.commands];
+    }
     if (this.enableDeviceSignature) {
-      params.device = await buildDeviceAuthSignature({ nonce, token, role, scopes, clientId: CLIENT_ID, clientMode: CLIENT_MODE, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY });
+      params.device = await buildDeviceAuthSignature({ nonce, token, role, scopes, clientId: this.clientId, clientMode: this.clientMode, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY });
     }
     if (token) params.auth = { token };
     return params;

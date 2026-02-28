@@ -1,4 +1,4 @@
-import { gateway } from './gateway.js';
+import { gateway, nodeGateway } from './gateway.js';
 import { state } from './state.js';
 import { renderSessions, selectItem } from './sidebar.js';
 import { ensureChatCacheLoaded, getCachedSessions, setCachedSessions } from './chat-cache.js';
@@ -156,6 +156,8 @@ export async function handleConnect(options = {}) {
 
   try {
     await gateway.connect(url, token);
+    // Also connect the node gateway for exec requests
+    nodeGateway.connect(url, token).catch(() => {});
     savedGatewayToken = token;
     if (tokenInput && !tokenInput.value && token) tokenInput.value = token;
     updateConnectionStatus('connected');
