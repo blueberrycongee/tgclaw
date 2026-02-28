@@ -722,6 +722,14 @@ a:hover {
   color: var(--accent);
 }
 
+.chat-header-status.is-typing .status-dot {
+  background: var(--accent);
+}
+
+.chat-header-status.is-typing #chat-status-text {
+  color: var(--accent);
+}
+
 #chat-messages {
   flex: 1;
   min-height: 0;
