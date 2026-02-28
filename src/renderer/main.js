@@ -38,6 +38,7 @@ import {
 } from './terminal.js';
 import { exportTerminalLog, splitTerminal } from './split.js';
 import { updateWindowTitle } from './title.js';
+import { setupSystemRunHandler } from './system-run.js';
 
 configureTerminal({ getActiveProjectTab });
 configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWindowTitle, reloadChatHistory, updateChatHeader });
@@ -132,6 +133,7 @@ initAgentPicker();
 initShortcutBindings();
 bindTerminalSearchEvents();
 initChat();
+setupSystemRunHandler();
 initThemeToggle();
 void initSettings();
 bindGlobalEvents();
