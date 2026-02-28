@@ -190,7 +190,8 @@ export function closeTab(projectId, tabId) {
   tab.cleanup();
   projectTabs.splice(index, 1);
   if (state.activeTab[projectId] === tabId) state.activeTab[projectId] = projectTabs.length > 0 ? projectTabs[projectTabs.length - 1].id : null;
-  renderTabs(projectId);
+
+  if (state.currentItem === projectId) renderTabs(projectId);
   deps.renderProjects();
   deps.updateWindowTitle();
 }
