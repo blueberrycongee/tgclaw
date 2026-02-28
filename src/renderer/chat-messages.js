@@ -78,6 +78,10 @@ export function appendMessage(text, cls, options = {}) {
   div.className = `message ${cls}`;
   if (cls === 'from-bot') renderBotMessage(div, text);
   else div.textContent = text;
+  const time = document.createElement('span');
+  time.className = 'message-time';
+  time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  div.appendChild(time);
   if (cls === 'from-bot') addCodeBlockCopyButtons(div);
   container.appendChild(div);
   animateMessageEntry(div, animate);
@@ -140,9 +144,15 @@ export function createStreamMessage() {
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = 'message from-bot';
+  const content = document.createElement('div');
+  div.appendChild(content);
+  const time = document.createElement('span');
+  time.className = 'message-time';
+  time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  div.appendChild(time);
   container.appendChild(div);
   animateMessageEntry(div);
   updateEmptyState();
   scrollChatToBottom();
-  return div;
+  return content;
 }
