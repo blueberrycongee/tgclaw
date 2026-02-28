@@ -4,6 +4,7 @@ import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
 import { state } from './state.js';
 import { gateway } from './gateway.js';
+import { renderSessions } from './sidebar.js';
 const marked = new Marked(markedHighlight({
   emptyLangClass: 'hljs',
   langPrefix: 'hljs language-',
@@ -299,14 +300,23 @@ export function initChat() {
     }
   });
   gateway.on('chat', handleGatewayChat);
-  gateway.on('connected', () => {
+  gateway.on('connected', async () => {
     gatewayOnline = true;
     renderChatHeaderStatus();
     void reloadChatHistory();
+    try {
+      const result = await gateway.sessionsList();
+      state.sessions = Array.isArray(result?.sessions) ? result.sessions : (Array.isArray(result) ? result : []);
+      renderSessions();
+    } catch {
+      // no-op
+    }
   });
   gateway.on('disconnected', () => {
     gatewayOnline = false;
     resetStreamingState();
+    state.sessions = [];
+    renderSessions();
   });
   gateway.on('error', () => {
     gatewayOnline = false;
