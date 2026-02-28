@@ -28,17 +28,25 @@ function registerIpcHandlers(ipcMain) {
 
   ipcMain.handle('gateway:get-config', () => {
     const saved = store.get('gatewayConfig', {});
+    const hasSavedConfig = !!saved && typeof saved === 'object'
+      && (
+        Object.prototype.hasOwnProperty.call(saved, 'url')
+        || Object.prototype.hasOwnProperty.call(saved, 'token')
+        || saved.configured === true
+      );
     const url = typeof saved?.url === 'string' && saved.url ? saved.url : 'ws://localhost:18789';
     const token = typeof saved?.token === 'string' ? saved.token : '';
-    return { url, token };
+    const configured = saved?.configured === true || hasSavedConfig;
+    return { url, token, configured };
   });
 
   ipcMain.handle('gateway:save-config', (event, config) => {
     const next = config && typeof config === 'object' ? config : {};
     const url = typeof next.url === 'string' && next.url ? next.url : 'ws://localhost:18789';
     const token = typeof next.token === 'string' ? next.token : '';
-    store.set('gatewayConfig', { url, token });
-    return { url, token };
+    const configured = typeof next.configured === 'boolean' ? next.configured : true;
+    store.set('gatewayConfig', { url, token, configured });
+    return { url, token, configured };
   });
 
   ipcMain.handle('terminal:save-log', async (event, text) => {
