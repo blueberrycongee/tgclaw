@@ -4,6 +4,7 @@ import { renderAgentIcon, renderIcon } from './icons.js';
 import { closeTerminalSearch, createTerminal, hideAllTerminals, showTerminal } from './terminal.js';
 const deps = { renderProjects: () => {}, updateWindowTitle: () => {} };
 let agentPickerSelectionLocked = false;
+let addTabHoverHideTimer = null;
 export function configureTabs(nextDeps) { Object.assign(deps, nextDeps); }
 export function getTabDisplayName(tab) { return tab.customName || agentLabel(tab.type); }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
@@ -174,20 +175,100 @@ export function onTabDragEnd() {
   document.querySelectorAll('.tab').forEach((tabEl) => tabEl.classList.remove('dragging'));
   clearTabDropIndicators();
 }
+
+function clearAddTabHoverHideTimer() {
+  if (addTabHoverHideTimer) clearTimeout(addTabHoverHideTimer);
+  addTabHoverHideTimer = null;
+}
+
+function getAddTabHoverMenu() {
+  return document.getElementById('add-tab-hover-menu');
+}
+
+function positionAddTabHoverMenu() {
+  const addTabButton = document.getElementById('add-tab');
+  const menu = getAddTabHoverMenu();
+  if (!addTabButton || !menu) return;
+
+  const rect = addTabButton.getBoundingClientRect();
+  const menuWidth = menu.offsetWidth || 190;
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
+  menu.style.left = `${Math.round(left)}px`;
+  menu.style.top = `${Math.round(rect.bottom + 6)}px`;
+}
+
+function showAddTabHoverMenu() {
+  clearAddTabHoverHideTimer();
+  const menu = getAddTabHoverMenu();
+  if (!menu) return;
+  menu.classList.add('show');
+  positionAddTabHoverMenu();
+}
+
+function hideAddTabHoverMenu() {
+  clearAddTabHoverHideTimer();
+  const menu = getAddTabHoverMenu();
+  if (!menu) return;
+  menu.classList.remove('show');
+}
+
+function scheduleHideAddTabHoverMenu() {
+  clearAddTabHoverHideTimer();
+  addTabHoverHideTimer = setTimeout(() => hideAddTabHoverMenu(), 120);
+}
+
 export function showAgentPicker() {
   agentPickerSelectionLocked = false;
-  document.getElementById('agent-picker').classList.add('show');
+  hideAddTabHoverMenu();
+  document.getElementById('agent-picker')?.classList.add('show');
 }
 export function hideAgentPicker() {
   agentPickerSelectionLocked = false;
-  document.getElementById('agent-picker').classList.remove('show');
+  document.getElementById('agent-picker')?.classList.remove('show');
+  hideAddTabHoverMenu();
 }
 export function initAgentPicker() {
-  document.getElementById('add-tab')?.addEventListener('click', showAgentPicker);
-  document.getElementById('agent-picker').addEventListener('click', (event) => {
+  const addTabButton = document.getElementById('add-tab');
+  const addTabHoverMenu = getAddTabHoverMenu();
+  if (addTabButton && addTabHoverMenu) {
+    addTabButton.addEventListener('mouseenter', () => showAddTabHoverMenu());
+    addTabButton.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
+    addTabButton.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      showAddTabHoverMenu();
+    });
+
+    addTabHoverMenu.addEventListener('mouseenter', () => clearAddTabHoverHideTimer());
+    addTabHoverMenu.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
+    addTabHoverMenu.querySelectorAll('.tab-add-option').forEach((option) => option.addEventListener('click', () => {
+      const type = option.dataset.agentType;
+      if (!type || agentPickerSelectionLocked) return;
+      agentPickerSelectionLocked = true;
+      option.classList.add('pick-feedback');
+      setTimeout(() => {
+        option.classList.remove('pick-feedback');
+        hideAddTabHoverMenu();
+        addAgentTab(type);
+        agentPickerSelectionLocked = false;
+      }, 120);
+    }));
+
+    document.addEventListener('click', (event) => {
+      if (addTabButton.contains(event.target) || addTabHoverMenu.contains(event.target)) return;
+      hideAddTabHoverMenu();
+    });
+
+    window.addEventListener('resize', () => {
+      if (!addTabHoverMenu.classList.contains('show')) return;
+      positionAddTabHoverMenu();
+    });
+  }
+
+  document.getElementById('agent-picker')?.addEventListener('click', (event) => {
     if (event.target.id === 'agent-picker') hideAgentPicker();
   });
-  document.querySelectorAll('.agent-option').forEach((option) => option.addEventListener('click', () => {
+  document.querySelectorAll('#agent-picker .agent-option').forEach((option) => option.addEventListener('click', () => {
     const type = option.dataset.agentType;
     if (!type || agentPickerSelectionLocked) return;
     agentPickerSelectionLocked = true;

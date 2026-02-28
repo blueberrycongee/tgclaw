@@ -150,4 +150,9 @@ export function initStaticIcons() {
     const agentType = element.getAttribute('data-agent-icon') || '';
     element.innerHTML = renderAgentIcon(agentType, { size: 14, className: 'quick-agent-glyph' });
   });
+
+  document.querySelectorAll('.tab-add-option-icon[data-agent-icon]').forEach((element) => {
+    const agentType = element.getAttribute('data-agent-icon') || '';
+    element.innerHTML = renderAgentIcon(agentType, { size: 14, className: 'tab-add-agent-glyph' });
+  });
 }

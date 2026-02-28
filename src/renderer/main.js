@@ -2,6 +2,7 @@ import './styles.css';
 import './terminal-fullbleed.css';
 import './chat-inputbar-flat.css';
 import './tabbar-scroll.css';
+import './add-tab-hover-menu.css';
 import { state } from './state.js';
 import { copyTextToClipboard, normalizeProject } from './utils.js';
 import { initStaticIcons } from './icons.js';
@@ -71,7 +72,8 @@ function bindGlobalEvents() {
     if (event.key !== 'Escape') return;
 
     const picker = document.getElementById('agent-picker');
-    if (picker.classList.contains('show')) {
+    const hoverMenu = document.getElementById('add-tab-hover-menu');
+    if (picker.classList.contains('show') || hoverMenu?.classList.contains('show')) {
       hideAgentPicker();
       return;
     }
