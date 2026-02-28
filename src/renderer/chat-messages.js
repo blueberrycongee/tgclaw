@@ -72,17 +72,22 @@ export function notifyIncomingBotMessage(text) {
 
 export function appendMessage(text, cls, options = {}) {
   const animate = options.animate !== false;
-  if (cls === 'from-bot') markBotUnread();
+  const classList = String(cls || '').split(/\s+/).filter(Boolean);
+  const isBotMessage = classList.includes('from-bot');
+  if (isBotMessage) markBotUnread();
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
   div.className = `message ${cls}`;
-  if (cls === 'from-bot') renderBotMessage(div, text);
+  if (isBotMessage) renderBotMessage(div, text);
   else div.textContent = text;
   const time = document.createElement('span');
   time.className = 'message-time';
-  time.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const createdAt = Number.isFinite(new Date(options.createdAt).getTime())
+    ? new Date(options.createdAt)
+    : new Date();
+  time.textContent = createdAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   div.appendChild(time);
-  if (cls === 'from-bot') addCodeBlockCopyButtons(div);
+  if (isBotMessage) addCodeBlockCopyButtons(div);
   container.appendChild(div);
   animateMessageEntry(div, animate);
   scrollChatToBottom();
