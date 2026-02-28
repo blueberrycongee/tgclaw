@@ -62,6 +62,7 @@ let gatewayOnline = false;
 let lastRenderTime = 0;
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
+let typingIndicatorDiv = null;
 const MESSAGE_ENTER_DURATION_MS = 180;
 
 function animateMessageEntry(element, enabled = true) {
@@ -128,6 +129,23 @@ function scrollChatToBottom() {
 }
 function showStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'inline-flex'; }
 function hideStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'none'; }
+function clearTypingIndicator() {
+  if (!typingIndicatorDiv) return;
+  typingIndicatorDiv.remove();
+  typingIndicatorDiv = null;
+}
+function showTypingIndicator() {
+  clearTypingIndicator();
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  const div = document.createElement('div');
+  div.className = 'message from-bot typing-indicator';
+  div.innerHTML = '<span class="typing-dots"><span>.</span><span>.</span><span>.</span></span>';
+  container.appendChild(div);
+  typingIndicatorDiv = div;
+  animateMessageEntry(div);
+  scrollChatToBottom();
+}
 function abortChat() {
   if (!isStreaming || !currentRunId) return;
   void gateway.chatAbort(state.currentSessionKey, currentRunId).catch(() => {});
@@ -152,6 +170,7 @@ function renderChatHeaderStatus() {
   chatHeaderStatusText.textContent = 'Online';
 }
 function resetStreamingState() {
+  clearTypingIndicator();
   currentStreamDiv = null;
   currentStreamText = '';
   currentRunId = null;
@@ -262,6 +281,7 @@ function formatGatewayErrorMessage(rawMessage) {
   return `${message} Hint: if Claude Code works with the same relay, check OpenClaw provider headers/auth mode (Bearer auth + Claude CLI headers).`;
 }
 function handleGatewayChat(frame) {
+  clearTypingIndicator();
   const eventState = typeof frame?.state === 'string' ? frame.state : '';
   if (eventState === 'delta') {
     const delta = extractFrameText(frame);
@@ -318,6 +338,7 @@ export function sendChat() {
   }
   assistantPending = true;
   renderChatHeaderStatus();
+  showTypingIndicator();
   void gateway.chatSend(state.currentSessionKey, text).catch((err) => {
     resetStreamingState();
     appendMessage(`Gateway error: ${formatGatewayErrorMessage(err?.message || 'Failed to send message')}`, 'from-bot');
