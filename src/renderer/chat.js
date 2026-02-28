@@ -142,12 +142,20 @@ function scrollChatToBottom() {
   const container = document.getElementById('chat-messages');
   if (container) container.scrollTop = container.scrollHeight;
 }
+function updateEmptyState() {
+  const container = document.getElementById('chat-messages');
+  const emptyState = document.getElementById('chat-empty-state');
+  if (!container || !emptyState) return;
+  const hasMessages = Boolean(container.querySelector('.message'));
+  emptyState.style.display = hasMessages ? 'none' : 'flex';
+}
 function showStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'inline-flex'; }
 function hideStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'none'; }
 function clearTypingIndicator() {
   if (!typingIndicatorDiv) return;
   typingIndicatorDiv.remove();
   typingIndicatorDiv = null;
+  updateEmptyState();
 }
 function showTypingIndicator() {
   clearTypingIndicator();
@@ -159,6 +167,7 @@ function showTypingIndicator() {
   container.appendChild(div);
   typingIndicatorDiv = div;
   animateMessageEntry(div);
+  updateEmptyState();
   scrollChatToBottom();
 }
 function abortChat() {
@@ -200,10 +209,16 @@ export async function reloadChatHistory() {
   if (!container) return;
   resetStreamingState();
   container.innerHTML = '';
-  if (!gateway.connected) return;
+  if (!gateway.connected) {
+    updateEmptyState();
+    return;
+  }
   try {
     const messages = await gateway.chatHistory(state.currentSessionKey, 50);
-    if (!Array.isArray(messages)) return;
+    if (!Array.isArray(messages)) {
+      updateEmptyState();
+      return;
+    }
     messages.forEach((message) => {
       if (!message || typeof message.content !== 'string') return;
       if (message.role === 'user') {
@@ -215,6 +230,7 @@ export async function reloadChatHistory() {
   } catch {
     // no-op
   }
+  updateEmptyState();
 }
 export function appendMessage(text, cls, options = {}) {
   const animate = options.animate !== false;
@@ -227,6 +243,7 @@ export function appendMessage(text, cls, options = {}) {
   container.appendChild(div);
   animateMessageEntry(div, animate);
   scrollChatToBottom();
+  updateEmptyState();
   return div;
 }
 function createStreamMessage() {
@@ -236,6 +253,7 @@ function createStreamMessage() {
   div.className = 'message from-bot';
   container.appendChild(div);
   animateMessageEntry(div);
+  updateEmptyState();
   scrollChatToBottom();
   return div;
 }
@@ -401,5 +419,6 @@ export function initChat() {
   gatewayOnline = gateway.connected;
   renderChatHeaderStatus();
   updateChatHeader();
+  updateEmptyState();
   resizeChatInput();
 }
