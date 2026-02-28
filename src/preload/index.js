@@ -12,6 +12,9 @@ contextBridge.exposeInMainWorld('tgclaw', {
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
   spawnCommand: (opts) => ipcRenderer.invoke('pty:spawn-command', opts),
+  startTerminalSession: (opts) => ipcRenderer.invoke('terminal:start', opts),
+  attachTerminalSession: (opts) => ipcRenderer.invoke('terminal:attach', opts),
+  getTerminalSessionStatus: (opts) => ipcRenderer.invoke('terminal:status', opts),
   getProjects: () => ipcRenderer.invoke('projects:get'),
   saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
   getChatCache: () => ipcRenderer.invoke('chat:get-cache'),
@@ -30,9 +33,28 @@ contextBridge.exposeInMainWorld('tgclaw', {
     exitCode,
   }),
   notifyChatMessage: ({ title, body }) => ipcRenderer.send('notify:chat-message', { title, body }),
+  writeTerminalSession: (terminalSessionId, data) => ipcRenderer.send('terminal:input', { terminalSessionId, data }),
+  resizeTerminalSession: (terminalSessionId, cols, rows) => ipcRenderer.send('terminal:resize', {
+    terminalSessionId,
+    cols,
+    rows,
+  }),
+  killTerminalSession: (terminalSessionId) => ipcRenderer.send('terminal:kill', { terminalSessionId }),
   writePty: (id, data) => ipcRenderer.send('pty:write', { id, data }),
   resizePty: (id, cols, rows) => ipcRenderer.send('pty:resize', { id, cols, rows }),
   killPty: (id) => ipcRenderer.send('pty:kill', { id }),
+  onTerminalSessionData: (terminalSessionId, callback) => {
+    const channel = `terminal:data:${terminalSessionId}`;
+    const listener = (event, data) => callback(data);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
+  onTerminalSessionExit: (terminalSessionId, callback) => {
+    const channel = `terminal:exit:${terminalSessionId}`;
+    const listener = (event, payload) => callback(payload);
+    ipcRenderer.on(channel, listener);
+    return () => ipcRenderer.removeListener(channel, listener);
+  },
   onPtyData: (id, callback) => {
     const channel = `pty:data:${id}`;
     const listener = (event, data) => callback(data);
