@@ -26,6 +26,34 @@ function registerIpcHandlers(ipcMain) {
     store.set('projects', Array.isArray(nextProjects) ? nextProjects : []);
   });
 
+  ipcMain.handle('chat:get-cache', () => {
+    const saved = store.get('chatCache', {});
+    const sessions = Array.isArray(saved?.sessions) ? saved.sessions : [];
+    const messagesBySession = saved?.messagesBySession && typeof saved.messagesBySession === 'object'
+      ? saved.messagesBySession
+      : {};
+    return {
+      version: 1,
+      sessions,
+      messagesBySession,
+    };
+  });
+
+  ipcMain.handle('chat:save-cache', (event, nextCache) => {
+    const cache = nextCache && typeof nextCache === 'object' ? nextCache : {};
+    const sessions = Array.isArray(cache.sessions) ? cache.sessions : [];
+    const messagesBySession = cache.messagesBySession && typeof cache.messagesBySession === 'object'
+      ? cache.messagesBySession
+      : {};
+    const normalized = {
+      version: 1,
+      sessions,
+      messagesBySession,
+    };
+    store.set('chatCache', normalized);
+    return normalized;
+  });
+
   ipcMain.handle('gateway:get-config', () => {
     const saved = store.get('gatewayConfig', {});
     const hasSavedConfig = !!saved && typeof saved === 'object'

@@ -1,6 +1,7 @@
 import { gateway } from './gateway.js';
 import { state } from './state.js';
 import { renderSessions, selectItem } from './sidebar.js';
+import { ensureChatCacheLoaded, getCachedSessions, setCachedSessions } from './chat-cache.js';
 
 const DEFAULT_GATEWAY_URL = 'ws://localhost:18789';
 
@@ -9,6 +10,24 @@ let urlInput = null;
 let tokenInput = null;
 let statusText = null;
 let autoConnectTried = false;
+
+function mergeSessions(remoteSessions, cachedSessions) {
+  const merged = [];
+  const seen = new Set();
+  [...remoteSessions, ...cachedSessions].forEach((session) => {
+    if (!session || typeof session.sessionKey !== 'string') return;
+    const sessionKey = session.sessionKey.trim();
+    if (!sessionKey || sessionKey === 'default' || seen.has(sessionKey)) return;
+    seen.add(sessionKey);
+    const label = typeof session.label === 'string' && session.label.trim() ? session.label.trim() : sessionKey;
+    const updatedAt = Number.isFinite(new Date(session.updatedAt).getTime())
+      ? new Date(session.updatedAt).getTime()
+      : Date.now();
+    merged.push({ sessionKey, label, updatedAt });
+  });
+  merged.sort((left, right) => right.updatedAt - left.updatedAt);
+  return merged;
+}
 
 export async function initSettings() {
   settingsPanel = document.getElementById('gateway-settings');
@@ -31,14 +50,17 @@ export async function initSettings() {
     updateConnectionStatus('connected');
     void syncSessionsFromGateway();
   });
-  gateway.on('disconnected', () => {
-    updateConnectionStatus('disconnected');
-    state.sessions = [];
-    renderSessions();
-  });
+  gateway.on('disconnected', () => updateConnectionStatus('disconnected'));
   gateway.on('error', () => updateConnectionStatus('disconnected'));
 
   updateConnectionStatus(gateway.connected ? 'connected' : 'disconnected');
+  await ensureChatCacheLoaded();
+  const cachedSessions = getCachedSessions();
+  if (!state.sessions.length && cachedSessions.length) {
+    state.sessions = cachedSessions;
+    renderSessions();
+  }
+
   const config = await loadSavedConfig();
 
   if (!config.configured) {
@@ -51,11 +73,14 @@ export async function initSettings() {
 }
 
 async function syncSessionsFromGateway() {
+  const cachedSessions = getCachedSessions();
   try {
-    const sessions = await gateway.sessionsList();
-    state.sessions = Array.isArray(sessions) ? sessions : [];
+    const payload = await gateway.sessionsList();
+    const remoteSessions = Array.isArray(payload?.sessions) ? payload.sessions : (Array.isArray(payload) ? payload : []);
+    state.sessions = mergeSessions(remoteSessions, cachedSessions);
+    setCachedSessions(state.sessions);
   } catch {
-    state.sessions = [];
+    state.sessions = cachedSessions;
   }
   renderSessions();
   const lastSessionKey = localStorage.getItem('tgclaw:lastSessionKey');

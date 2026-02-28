@@ -13,6 +13,8 @@ contextBridge.exposeInMainWorld('tgclaw', {
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
   getProjects: () => ipcRenderer.invoke('projects:get'),
   saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
+  getChatCache: () => ipcRenderer.invoke('chat:get-cache'),
+  saveChatCache: (cache) => ipcRenderer.invoke('chat:save-cache', cache),
   getGatewayConfig: () => ipcRenderer.invoke('gateway:get-config'),
   saveGatewayConfig: (config) => ipcRenderer.invoke('gateway:save-config', config),
   saveTerminalLog: (text) => ipcRenderer.invoke('terminal:save-log', text),
