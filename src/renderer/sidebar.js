@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { escapeHtml } from './utils.js';
 import { renderIcon } from './icons.js';
 import { showInputModal } from './modal.js';
+import { updateEmptyState } from './chat-messages.js';
 
 const deps = {
   renderTabs: () => {},
@@ -119,6 +120,20 @@ export function renderProjects() {
   });
 }
 
+function createNewChatSession() {
+  const sessionKey = `chat-${Date.now()}`;
+  const existingSessions = Array.isArray(state.sessions) ? state.sessions : [];
+  if (!existingSessions.some((item) => item?.sessionKey === sessionKey)) {
+    state.sessions = [{ sessionKey, label: 'New Chat' }, ...existingSessions];
+  }
+  renderSessions();
+  selectItem(`session:${sessionKey}`);
+  const chatMessages = document.getElementById('chat-messages');
+  if (chatMessages) chatMessages.innerHTML = '';
+  updateEmptyState();
+  document.getElementById('chat-input')?.focus();
+}
+
 export function deleteProject(projectId) {
   const index = state.projects.findIndex((project) => project.id === projectId);
   if (index === -1) return;
@@ -193,6 +208,7 @@ export function onProjectDragEnd() {
 
 export function initSidebarBindings() {
   document.querySelector('.sidebar-item.pinned[data-id="openclaw"]')?.addEventListener('click', () => selectItem('openclaw'));
+  document.getElementById('new-chat-btn')?.addEventListener('click', createNewChatSession);
   document.getElementById('add-project')?.addEventListener('click', () => void addProject());
 
   document.getElementById('project-list').addEventListener('contextmenu', (event) => {
