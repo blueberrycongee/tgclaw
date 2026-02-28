@@ -11,6 +11,34 @@ let isStreaming = false;
 let lastRenderTime = 0;
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
+const MESSAGE_ENTER_DURATION_MS = 180;
+
+function animateMessageEntry(element, enabled = true) {
+  if (!enabled || !element) return;
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+  element.classList.add('message-enter');
+
+  // Force a frame boundary so the browser can transition from the initial state.
+  requestAnimationFrame(() => {
+    element.classList.add('message-enter-active');
+  });
+
+  let cleaned = false;
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    element.classList.remove('message-enter', 'message-enter-active');
+    element.removeEventListener('transitionend', onTransitionEnd);
+  };
+  const onTransitionEnd = (event) => {
+    if (event.target !== element) return;
+    cleanup();
+  };
+
+  element.addEventListener('transitionend', onTransitionEnd);
+  setTimeout(cleanup, MESSAGE_ENTER_DURATION_MS + 80);
+}
 
 export function configureChat({ updateOpenClawBadge }) {
   updateOpenClawBadgeRef = updateOpenClawBadge;
@@ -69,16 +97,17 @@ async function loadChatHistory() {
     messages.forEach((message) => {
       if (!message || typeof message.content !== 'string') return;
       if (message.role === 'user') {
-        appendMessage(message.content, 'from-user');
+        appendMessage(message.content, 'from-user', { animate: false });
         return;
       }
-      if (message.role === 'assistant') appendMessage(message.content, 'from-bot');
+      if (message.role === 'assistant') appendMessage(message.content, 'from-bot', { animate: false });
     });
   } catch (error) {
     void error;
   }
 }
-export function appendMessage(text, cls) {
+export function appendMessage(text, cls, options = {}) {
+  const animate = options.animate !== false;
   if (cls === 'from-bot') markBotUnread();
   const container = document.getElementById('chat-messages');
   const div = document.createElement('div');
@@ -86,6 +115,7 @@ export function appendMessage(text, cls) {
   if (cls === 'from-bot') renderBotMessage(div, text);
   else div.textContent = text;
   container.appendChild(div);
+  animateMessageEntry(div, animate);
   scrollChatToBottom();
   return div;
 }
@@ -95,6 +125,7 @@ function createStreamMessage() {
   const div = document.createElement('div');
   div.className = 'message from-bot';
   container.appendChild(div);
+  animateMessageEntry(div);
   scrollChatToBottom();
   return div;
 }

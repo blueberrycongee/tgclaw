@@ -679,6 +679,18 @@ a:hover {
   word-break: break-word;
 }
 
+.message.message-enter {
+  opacity: 0;
+  transform: translateY(2px);
+  will-change: opacity, transform;
+}
+
+.message.message-enter.message-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+
 .message.from-user {
   margin-left: auto;
   background: var(--accent);
@@ -719,6 +731,15 @@ a:hover {
 .message.from-bot pre code {
   padding: 0;
   background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message.message-enter,
+  .message.message-enter.message-enter-active {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
 }
 
 #chat-input-bar {
