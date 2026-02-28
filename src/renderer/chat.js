@@ -95,6 +95,21 @@ function animateMessageEntry(element, enabled = true) {
 export function configureChat({ updateOpenClawBadge }) {
   updateOpenClawBadgeRef = updateOpenClawBadge;
 }
+export function updateChatHeader() {
+  const title = document.querySelector('.chat-header-title');
+  if (!title) return;
+
+  if (!state.currentSessionKey || state.currentSessionKey === 'default') {
+    title.textContent = 'OpenClaw';
+    return;
+  }
+
+  const session = (Array.isArray(state.sessions) ? state.sessions : []).find((item) => (
+    item && item.sessionKey === state.currentSessionKey
+  ));
+  const label = typeof session?.label === 'string' && session.label.trim() ? session.label : state.currentSessionKey;
+  title.textContent = label;
+}
 function activeChatItem() { return state.currentItem === 'openclaw' || state.currentItem.startsWith('session:'); }
 function resizeChatInput() {
   if (!chatInput) return;
@@ -366,6 +381,7 @@ export function initChat() {
       const result = await gateway.sessionsList();
       state.sessions = Array.isArray(result?.sessions) ? result.sessions : (Array.isArray(result) ? result : []);
       renderSessions();
+      updateChatHeader();
     } catch {
       // no-op
     }
@@ -375,6 +391,7 @@ export function initChat() {
     resetStreamingState();
     state.sessions = [];
     renderSessions();
+    updateChatHeader();
   });
   gateway.on('error', () => {
     gatewayOnline = false;
@@ -383,5 +400,6 @@ export function initChat() {
 
   gatewayOnline = gateway.connected;
   renderChatHeaderStatus();
+  updateChatHeader();
   resizeChatInput();
 }

@@ -9,6 +9,7 @@ const deps = {
   closeTerminalSearch: () => {},
   updateWindowTitle: () => {},
   reloadChatHistory: () => {},
+  updateChatHeader: () => {},
 };
 
 export function configureSidebar(nextDeps) { Object.assign(deps, nextDeps); }
@@ -30,7 +31,10 @@ export function selectItem(id) {
   const isSessionItem = id.startsWith('session:');
   const nextSessionKey = isSessionItem ? id.slice('session:'.length) : id === 'openclaw' ? 'default' : null;
   const shouldReloadHistory = typeof nextSessionKey === 'string' && state.currentSessionKey !== nextSessionKey;
-  if (typeof nextSessionKey === 'string') state.currentSessionKey = nextSessionKey;
+  if (typeof nextSessionKey === 'string') {
+    state.currentSessionKey = nextSessionKey;
+    deps.updateChatHeader();
+  }
 
   state.currentItem = id;
   const tabbar = document.getElementById('tabbar');
