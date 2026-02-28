@@ -1,12 +1,13 @@
 import { state } from './state.js';
 
-const deps = {
+const hooks = {
   isTabRenaming: () => false,
   renderTabs: () => {},
 };
 
-export function configureTabsDragDrop(nextDeps) {
-  Object.assign(deps, nextDeps);
+export function configureTabDragDrop(nextHooks = {}) {
+  if (typeof nextHooks.isTabRenaming === 'function') hooks.isTabRenaming = nextHooks.isTabRenaming;
+  if (typeof nextHooks.renderTabs === 'function') hooks.renderTabs = nextHooks.renderTabs;
 }
 
 export function clearTabDropIndicators() {
@@ -14,7 +15,7 @@ export function clearTabDropIndicators() {
 }
 
 export function onTabDragStart(event, projectId, tabId) {
-  if (deps.isTabRenaming(projectId, tabId)) return event.preventDefault();
+  if (hooks.isTabRenaming(projectId, tabId)) return event.preventDefault();
   state.dragTabState = { projectId, tabId };
   event.dataTransfer.effectAllowed = 'move';
   event.dataTransfer.setData('text/plain', tabId);
@@ -43,7 +44,7 @@ export function onTabDrop(event, projectId, targetTabId) {
   const [movedTab] = projectTabs.splice(from, 1);
   projectTabs.splice(next, 0, movedTab);
   onTabDragEnd();
-  deps.renderTabs(projectId);
+  hooks.renderTabs(projectId);
 }
 
 export function onTabDragEnd() {
