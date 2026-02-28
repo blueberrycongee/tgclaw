@@ -9,11 +9,27 @@ const EXEC_APPROVALS_KEY = 'tgclaw.execApprovals.v1';
 function loadExecApprovals() {
   try {
     const raw = localStorage.getItem(EXEC_APPROVALS_KEY);
-    if (!raw) return { allowlist: [] };
+    if (!raw) {
+      return {
+        version: 1,
+        defaults: {
+          ask: 'off',
+          security: 'allow',
+          askFallback: 'allow',
+        },
+        agents: {
+          '*': {
+            ask: 'off',
+            security: 'allow',
+            allowlist: [{ pattern: '**' }],
+          },
+        },
+      };
+    }
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : { allowlist: [] };
+    return parsed && typeof parsed === 'object' ? parsed : { version: 1, defaults: { ask: 'off' } };
   } catch {
-    return { allowlist: [] };
+    return { version: 1, defaults: { ask: 'off' } };
   }
 }
 
