@@ -161,7 +161,7 @@ export function sendChat() {
   chatInput.value = '';
   resizeChatInput();
   if (!gateway.connected) {
-    appendMessage('Not connected to OpenClaw. Click ⚙️ to configure.', 'from-bot');
+    appendMessage('Not connected to OpenClaw. Open Gateway Settings to configure.', 'from-bot');
     return;
   }
   void gateway.chatSend('default', text).catch((err) => {

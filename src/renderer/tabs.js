@@ -1,10 +1,11 @@
 import { state } from './state.js';
-import { agentEmoji, agentLabel, escapeHtml } from './utils.js';
+import { agentLabel, escapeHtml } from './utils.js';
+import { renderAgentIcon, renderIcon } from './icons.js';
 import { closeTerminalSearch, createTerminal, hideAllTerminals, showTerminal } from './terminal.js';
 const deps = { renderProjects: () => {}, updateWindowTitle: () => {} };
 let agentPickerSelectionLocked = false;
 export function configureTabs(nextDeps) { Object.assign(deps, nextDeps); }
-export function getTabDisplayName(tab) { return tab.customName || `${agentEmoji(tab.type)} ${agentLabel(tab.type)}`; }
+export function getTabDisplayName(tab) { return tab.customName || agentLabel(tab.type); }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
 export function onTabTitleDoubleClick(event, projectId, tabId) {
   event.stopPropagation();
@@ -38,10 +39,11 @@ export function renderTabs(projectId) {
   const active = state.activeTab[projectId];
   const tabList = document.getElementById('tab-list');
   tabList.innerHTML = projectTabs.map((tab) => {
+    const icon = renderAgentIcon(tab.type, { size: 14, className: 'tab-agent-icon' });
     const title = isTabRenaming(projectId, tab.id)
       ? `<input class="tab-rename-input" type="text" value="${escapeHtml(getTabDisplayName(tab))}" data-tab-id="${tab.id}" />`
-      : `<span class="tab-title" data-tab-id="${tab.id}">${escapeHtml(getTabDisplayName(tab))}</span>`;
-    return `<div class="tab ${tab.id === active ? 'active' : ''}" data-tab-id="${tab.id}" draggable="true">${title}${tab.exited ? '<span class="tab-exited-flag">[Exited]</span>' : ''}<span class="close-tab" data-tab-id="${tab.id}">✕</span></div>`;
+      : `<span class="tab-title-row">${icon}<span class="tab-title" data-tab-id="${tab.id}">${escapeHtml(getTabDisplayName(tab))}</span></span>`;
+    return `<div class="tab ${tab.id === active ? 'active' : ''}" data-tab-id="${tab.id}" draggable="true">${title}${tab.exited ? '<span class="tab-exited-flag">[Exited]</span>' : ''}<span class="close-tab" data-tab-id="${tab.id}">${renderIcon('close', { size: 12, className: 'tab-close-icon' })}</span></div>`;
   }).join('');
   tabList.querySelectorAll('.tab').forEach((tabEl) => {
     const tabId = tabEl.dataset.tabId;

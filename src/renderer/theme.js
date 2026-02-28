@@ -1,10 +1,11 @@
 import { state } from './state.js';
 import { applyTerminalTheme } from './terminal.js';
+import { renderIcon } from './icons.js';
 
 function updateThemeToggleUi(button, theme) {
   const isLight = theme === 'light';
   document.body.classList.toggle('light-theme', isLight);
-  if (button) button.textContent = isLight ? '☀️' : '🌙';
+  if (button) button.innerHTML = renderIcon(isLight ? 'sun' : 'moon', { size: 14, className: 'action-glyph' });
 }
 
 export function initThemeToggle() {
