@@ -1013,6 +1013,106 @@ a:hover {
   color: var(--gray-600);
 }
 
+.message {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.message.from-user {
+  background: var(--bg-tab-active);
+  margin-left: auto;
+  border-bottom-right-radius: 4px;
+}
+.message.from-bot {
+  background: var(--bg-panel);
+  margin-right: auto;
+  border-bottom-left-radius: 4px;
+}
+.message.from-bot > :first-child { margin-top: 0; }
+.message.from-bot > :last-child { margin-bottom: 0; }
+.message.from-bot a { color: var(--accent); }
+.message.from-bot code:not(.hljs) {
+  font-family: Menlo, Monaco, "Courier New", monospace;
+  background: rgba(255,255,255,0.08);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.message.from-bot > pre {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow-x: auto;
+  padding: 8px;
+  margin: 8px 0;
+}
+.message.from-bot > pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+.message.from-bot .code-block-wrapper {
+  position: relative;
+  margin: 8px 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #0d1117;
+}
+.message.from-bot .code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.05);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.message.from-bot .code-copy-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.message.from-bot .code-copy-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+.message.from-bot .code-copy-btn:disabled {
+  cursor: default;
+}
+.message.from-bot .code-block-wrapper pre {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+.message.from-bot .code-block-wrapper pre code.hljs {
+  display: block;
+  padding: 12px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.5;
+  background: transparent;
+}
+body.light-theme .message.from-bot .code-block-wrapper {
+  background: #f6f8fa;
+}
+body.light-theme .message.from-bot .code-block-header {
+  background: rgba(0,0,0,0.04);
+}
+
+#gateway-connection-status.connecting {
+  color: var(--accent);
+}
+
+#gateway-connection-status.disconnected {
+  color: var(--gray-600);
+}
+
 .agent-option {
   height: 56px;
   display: flex;
