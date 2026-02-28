@@ -839,6 +839,10 @@ a:hover {
   border: 1px solid var(--gray-300);
 }
 
+.message.is-streaming {
+  white-space: pre-wrap;
+}
+
 .message.from-bot > :first-child {
   margin-top: 0;
 }
