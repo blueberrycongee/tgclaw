@@ -20,7 +20,7 @@ import {
   switchTab,
   renderTabs,
 } from './tabs.js';
-import { configureChat, initChat, reloadChatHistory } from './chat.js';
+import { configureChat, initChat, reloadChatHistory, updateChatHeader } from './chat.js';
 import { initSettings } from './settings.js';
 import { configureShortcuts, initShortcutBindings } from './shortcuts.js';
 import { initThemeToggle } from './theme.js';
@@ -35,7 +35,7 @@ import { exportTerminalLog, splitTerminal } from './split.js';
 import { updateWindowTitle } from './title.js';
 
 configureTerminal({ getActiveProjectTab });
-configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWindowTitle, reloadChatHistory });
+configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWindowTitle, reloadChatHistory, updateChatHeader });
 configureTabs({ renderProjects, updateWindowTitle });
 configureChat({ updateOpenClawBadge });
 configureShortcuts({ addAgentTab, closeTab, switchTab });
