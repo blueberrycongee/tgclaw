@@ -226,21 +226,41 @@ function longestSuffixPrefixOverlap(left, right) {
   }
   return 0;
 }
+function mergeIncomingText(currentText, incomingText) {
+  if (!incomingText) return currentText;
+  if (!currentText) return incomingText;
+  if (incomingText === currentText) return currentText;
+
+  // Snapshot mode: incoming already contains current rendered text.
+  if (incomingText.startsWith(currentText)) return incomingText;
+
+  // Late/out-of-order older frame, ignore to avoid rollback jitter.
+  if (currentText.startsWith(incomingText)) return currentText;
+
+  // Delta mode: append only the non-overlapping suffix.
+  const overlap = longestSuffixPrefixOverlap(currentText, incomingText);
+  if (overlap > 0) return currentText + incomingText.slice(overlap);
+
+  // If model rewrites after a pause, prefer much longer snapshot to reduce abrupt flip on final.
+  if (incomingText.length > currentText.length + 12) return incomingText;
+
+  return `${currentText}${incomingText}`;
+}
 function mergeStreamText(currentText, frame) {
+  let merged = currentText;
   const directDelta = typeof frame?.delta === 'string' ? frame.delta : '';
-  if (directDelta) return currentText + directDelta;
+  if (directDelta) merged = mergeIncomingText(merged, directDelta);
 
-  const snapshot = extractMessageContent(frame?.message);
-  if (!snapshot) return currentText;
-  if (!currentText || snapshot === currentText) return snapshot;
+  const snapshots = [
+    extractMessageContent(frame?.message),
+    typeof frame?.content === 'string' ? frame.content : '',
+    typeof frame?.text === 'string' ? frame.text : '',
+  ].filter(Boolean);
+  snapshots.forEach((snapshot) => {
+    merged = mergeIncomingText(merged, snapshot);
+  });
 
-  if (snapshot.startsWith(currentText)) return snapshot;
-  if (currentText.startsWith(snapshot)) return currentText;
-
-  const overlap = longestSuffixPrefixOverlap(currentText, snapshot);
-  if (overlap > 0) return currentText + snapshot.slice(overlap);
-
-  return snapshot;
+  return merged;
 }
 function formatGatewayErrorMessage(rawMessage) {
   const message = typeof rawMessage === 'string' && rawMessage.trim()
