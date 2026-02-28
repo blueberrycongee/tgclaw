@@ -34,10 +34,13 @@ export async function splitTerminal(tab, project) {
   term.open(secondaryPane);
 
   const outputBuffer = [];
-  const termId = await window.tgclaw.createPty({ cols: term.cols, rows: term.rows, cwd: project.cwd });
+  const spawnResult = await window.tgclaw.createPty({ cols: term.cols, rows: term.rows, cwd: project.cwd });
+  const termId = (spawnResult && typeof spawnResult === 'object' && typeof spawnResult.error === 'string')
+    ? null
+    : spawnResult;
   let cleanupData = () => {};
   let cleanupExit = () => {};
-  if (termId !== null && termId !== undefined) {
+  if (typeof termId === 'number') {
     cleanupData = window.tgclaw.onPtyData(termId, (data) => {
       outputBuffer.push(data);
       term.write(data);
@@ -48,7 +51,10 @@ export async function splitTerminal(tab, project) {
     term.onData((data) => window.tgclaw.writePty(termId, data));
     term.onResize(({ cols, rows }) => window.tgclaw.resizePty(termId, cols, rows));
   } else {
-    term.write('\r\n\x1b[31mFailed to spawn process.\x1b[0m\r\n');
+    const message = spawnResult && typeof spawnResult === 'object' && typeof spawnResult.error === 'string'
+      ? spawnResult.error
+      : 'Failed to spawn process.';
+    term.write(`\r\n\x1b[31m${message}\x1b[0m\r\n`);
   }
 
   tab.splitTerminal = {
@@ -61,7 +67,7 @@ export async function splitTerminal(tab, project) {
     cleanup: () => {
       cleanupData();
       cleanupExit();
-      if (termId !== null && termId !== undefined) window.tgclaw.killPty(termId);
+      if (typeof termId === 'number') window.tgclaw.killPty(termId);
       term.dispose();
       secondaryPane.remove();
       divider.remove();
