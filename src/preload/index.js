@@ -11,6 +11,7 @@ function onIpc(channel) {
 contextBridge.exposeInMainWorld('tgclaw', {
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
+  spawnCommand: (opts) => ipcRenderer.invoke('pty:spawn-command', opts),
   getProjects: () => ipcRenderer.invoke('projects:get'),
   saveProjects: (projects) => ipcRenderer.invoke('projects:save', projects),
   getChatCache: () => ipcRenderer.invoke('chat:get-cache'),

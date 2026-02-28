@@ -11,6 +11,29 @@ const LIGHT_THEME = { background: '#ffffff', foreground: '#171717', cursor: '#00
 function getTerminalTheme(theme) { return theme === 'light' ? LIGHT_THEME : DARK_THEME; }
 export function configureTerminal({ getActiveProjectTab }) { resolveActiveProjectTab = getActiveProjectTab; }
 
+function normalizeCommand(value) {
+  if (typeof value !== 'string') return '';
+  return value.trim();
+}
+
+function normalizeCommandArgs(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (item == null) return '';
+      return String(item);
+    })
+    .filter(Boolean);
+}
+
+function formatCommandLabel(command, commandArgs) {
+  const normalizedCommand = normalizeCommand(command);
+  const args = normalizeCommandArgs(commandArgs);
+  if (!normalizedCommand) return '';
+  return args.length > 0 ? `${normalizedCommand} ${args.join(' ')}` : normalizedCommand;
+}
+
 export function hideAllTerminals() {
   document.querySelectorAll('.terminal-wrapper').forEach((el) => { el.style.display = 'none'; });
 }
@@ -95,7 +118,16 @@ export function createBaseTerminal() {
   return new Terminal({ theme: getTerminalTheme(state.terminalTheme), fontSize: 13, fontFamily: 'ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace", "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New", monospace', cursorBlink: true, allowProposedApi: true });
 }
 
-export async function createTerminal({ tabId, type, project, onExit, onRestart, onOutput }) {
+export async function createTerminal({
+  tabId,
+  type,
+  command,
+  commandArgs = [],
+  project,
+  onExit,
+  onRestart,
+  onOutput,
+}) {
   const wrapper = document.createElement('div');
   wrapper.className = 'terminal-wrapper active';
   wrapper.id = `term-${tabId}`;
@@ -112,8 +144,25 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart, 
   setTimeout(() => fitAddon.fit(), 100);
 
   let termId = null;
+  const normalizedCommand = normalizeCommand(command);
+  const normalizedCommandArgs = normalizeCommandArgs(commandArgs);
+  const label = formatCommandLabel(normalizedCommand || type, normalizedCommandArgs) || type || 'shell';
   let spawnError = '';
-  if (type === 'shell') {
+
+  if (normalizedCommand) {
+    const result = await window.tgclaw.spawnCommand({
+      command: normalizedCommand,
+      args: normalizedCommandArgs,
+      cwd: project.cwd,
+      cols: term.cols,
+      rows: term.rows,
+    });
+    if (result && typeof result === 'object' && typeof result.error === 'string') {
+      spawnError = result.error;
+    } else {
+      termId = result;
+    }
+  } else if (type === 'shell' || !type) {
     const result = await window.tgclaw.createPty({ cols: term.cols, rows: term.rows, cwd: project.cwd });
     if (result && typeof result === 'object' && typeof result.error === 'string') {
       spawnError = result.error;
@@ -158,7 +207,11 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart, 
         }
       });
       cleanupRestart = () => restartDisposable.dispose();
-      window.tgclaw.notifyProcessExit({ agentType: type, projectName: project.name, exitCode: code });
+      window.tgclaw.notifyProcessExit({
+        agentType: label || type,
+        projectName: project.name,
+        exitCode: code,
+      });
       onExit(code);
     });
     const inputDisposable = term.onData((data) => {
