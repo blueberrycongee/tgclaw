@@ -7,7 +7,22 @@ let agentPickerSelectionLocked = false;
 let addTabHoverHideTimer = null;
 let addTabDefaultAgent = 'shell';
 const ADD_TAB_DEFAULT_KEY = 'tgclaw:add-tab-default-agent';
+const terminalActivityDebounce = new Map();
 export function configureTabs(nextDeps) { Object.assign(deps, nextDeps); }
+
+function scheduleProjectListRefresh(projectId) {
+  if (!projectId) return;
+  const existed = terminalActivityDebounce.get(projectId);
+  if (existed) clearTimeout(existed);
+  terminalActivityDebounce.set(projectId, setTimeout(() => {
+    terminalActivityDebounce.delete(projectId);
+    deps.renderProjects();
+  }, 500));
+}
+
+function onProjectOutput(projectId) {
+  scheduleProjectListRefresh(projectId);
+}
 export function getTabDisplayName(tab) { return tab.customName || agentLabel(tab.type); }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
 export function onTabTitleDoubleClick(event, projectId, tabId) {
@@ -106,6 +121,7 @@ export async function addAgentTab(type) {
     tabId,
     type,
     project,
+    onOutput: () => onProjectOutput(project.id),
     onExit: () => {
       const tab = (state.tabs[project.id] || []).find((item) => item.id === tabId);
       if (!tab) return;

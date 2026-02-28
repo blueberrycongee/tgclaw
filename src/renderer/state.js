@@ -8,6 +8,8 @@ export const state = {
   dragTabState: { projectId: null, tabId: null },
   dragProjectState: { projectId: null },
   tabRenameState: { projectId: null, tabId: null },
+  projectTerminalState: {},
+  projectLastSeenAt: {},
   terminalSearchVisible: false,
   terminalTheme: 'dark',
   unreadCount: 0,

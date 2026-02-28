@@ -20,6 +20,9 @@
   --accent-hover: #0761d1;
   --success: #0070f3;
   --error: #e00;
+  --terminal-working: #3b82f6;
+  --terminal-idle: #f59e0b;
+  --terminal-done: #22c55e;
   --text-primary: var(--gray-900);
   --text-secondary: var(--gray-600);
   --text-dim: var(--gray-600);
@@ -70,6 +73,9 @@ body.light-theme {
   --accent-hover: #0761d1;
   --success: #0070f3;
   --error: #e00;
+  --terminal-working: #2563eb;
+  --terminal-idle: #f59e0b;
+  --terminal-done: #16a34a;
   --text-primary: var(--gray-900);
   --text-secondary: var(--gray-600);
   --text-dim: var(--gray-600);
@@ -278,6 +284,62 @@ a:hover {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.item-status-row {
+  margin-top: 1px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-2);
+}
+
+.item-status-row .item-status {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--dot-color, var(--gray-400));
+  --dot-color: var(--gray-400);
+}
+
+.item-status-dot--attention {
+  animation: tgclaw-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.item-status-dot--working {
+  --dot-color: var(--terminal-working);
+}
+
+.item-status-dot--idle {
+  --dot-color: var(--terminal-idle);
+}
+
+.item-status-dot--done {
+  --dot-color: var(--terminal-done);
+}
+
+@keyframes tgclaw-dot-pulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-color), transparent 60%);
+  }
+  70% {
+    transform: scale(1.25);
+    box-shadow: 0 0 0 5px transparent;
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 
 .item-badge,

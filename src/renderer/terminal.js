@@ -95,7 +95,7 @@ export function createBaseTerminal() {
   return new Terminal({ theme: getTerminalTheme(state.terminalTheme), fontSize: 13, fontFamily: 'ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace", "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New", monospace', cursorBlink: true, allowProposedApi: true });
 }
 
-export async function createTerminal({ tabId, type, project, onExit, onRestart }) {
+export async function createTerminal({ tabId, type, project, onExit, onRestart, onOutput }) {
   const wrapper = document.createElement('div');
   wrapper.className = 'terminal-wrapper active';
   wrapper.id = `term-${tabId}`;
@@ -138,11 +138,14 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart }
   let cleanupInput = () => {};
   let cleanupResize = () => {};
   let cleanupRestart = () => {};
+  let lastActivityAt = Date.now();
   const outputBuffer = [];
   if (!spawnError) {
     cleanupData = window.tgclaw.onPtyData(termId, (data) => {
+      lastActivityAt = Date.now();
       outputBuffer.push(data);
       term.write(data);
+      if (typeof onOutput === 'function') onOutput();
     });
     cleanupExit = window.tgclaw.onPtyExit(termId, (code) => {
       cleanupInput();
@@ -158,7 +161,10 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart }
       window.tgclaw.notifyProcessExit({ agentType: type, projectName: project.name, exitCode: code });
       onExit(code);
     });
-    const inputDisposable = term.onData((data) => window.tgclaw.writePty(termId, data));
+    const inputDisposable = term.onData((data) => {
+      lastActivityAt = Date.now();
+      window.tgclaw.writePty(termId, data);
+    });
     cleanupInput = () => inputDisposable.dispose();
     const resizeDisposable = term.onResize(({ cols, rows }) => window.tgclaw.resizePty(termId, cols, rows));
     cleanupResize = () => resizeDisposable.dispose();
@@ -173,8 +179,10 @@ export async function createTerminal({ tabId, type, project, onExit, onRestart }
     fitAddon,
     searchAddon,
     exited: Boolean(spawnError),
+    lastActivityAt,
     wrapperEl: wrapper,
     getOutput: () => outputBuffer.join(''),
+    getLastActivityAt: () => lastActivityAt,
     cleanup: () => {
       cleanupData();
       cleanupExit();
