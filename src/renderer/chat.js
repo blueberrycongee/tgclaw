@@ -215,7 +215,7 @@ function handleGatewayChat(frame) {
     const rawMessage = frame?.error?.message || frame?.errorMessage || extractFrameText(frame);
     const message = formatGatewayErrorMessage(rawMessage);
     resetStreamingState();
-    appendMessage(`Gateway error: ${message}`, 'from-bot');
+    appendMessage(`Gateway error: ${message}`, 'from-bot message-error');
   }
 }
 export function sendChat() {
@@ -233,7 +233,7 @@ export function sendChat() {
   showTypingIndicator();
   void gateway.chatSend(state.currentSessionKey, text).catch((err) => {
     resetStreamingState();
-    appendMessage(`Gateway error: ${formatGatewayErrorMessage(err?.message || 'Failed to send message')}`, 'from-bot');
+    appendMessage(`Gateway error: ${formatGatewayErrorMessage(err?.message || 'Failed to send message')}`, 'from-bot message-error');
   });
 }
 export function initChat() {
