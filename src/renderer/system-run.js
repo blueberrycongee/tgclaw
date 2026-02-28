@@ -71,10 +71,10 @@ function parseCommandToArgv(command) {
 }
 
 async function handleSystemRun(request) {
-  const { id: requestId, command, paramsJSON } = request;
+  const { id: requestId, nodeId, command, paramsJSON } = request;
 
   if (command !== 'system.run') {
-    await gateway.nodeInvokeResult(requestId, false, null, {
+    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'UNSUPPORTED_COMMAND',
       message: `Unsupported command: ${command}`,
     });
@@ -83,7 +83,7 @@ async function handleSystemRun(request) {
 
   const params = parseSystemRunParams(paramsJSON);
   if (!params || !params.command) {
-    await gateway.nodeInvokeResult(requestId, false, null, {
+    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'INVALID_PARAMS',
       message: 'Missing required command parameter',
     });
@@ -95,7 +95,7 @@ async function handleSystemRun(request) {
   const project = resolveProjectForCwd(params.cwd);
 
   if (!project) {
-    await gateway.nodeInvokeResult(requestId, false, null, {
+    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'NO_PROJECT',
       message: 'No project found for the specified working directory',
     });
@@ -126,7 +126,7 @@ async function handleSystemRun(request) {
       command: params.command,
     });
 
-    await gateway.nodeInvokeResult(requestId, true, {
+    await gateway.nodeInvokeResult(requestId, nodeId, true, {
       status: 'started',
       terminalSessionId,
       projectId: project.id,
@@ -134,7 +134,7 @@ async function handleSystemRun(request) {
     }, null);
 
   } catch (err) {
-    await gateway.nodeInvokeResult(requestId, false, null, {
+    await gateway.nodeInvokeResult(requestId, nodeId, false, null, {
       code: 'LAUNCH_FAILED',
       message: err instanceof Error ? err.message : String(err),
     });

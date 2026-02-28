@@ -1,6 +1,6 @@
 import { buildDeviceAuthSignature, randomId } from './gateway-identity.js';
-const PROTOCOL_VERSION = 3, CLIENT_ID = 'tgclaw';
-const CLIENT_MODE = 'cli';
+const PROTOCOL_VERSION = 3, CLIENT_ID = 'node-host';
+const CLIENT_MODE = 'node';
 const CLIENT_VERSION = '1.0.0';
 const CLIENT_PLATFORM = 'electron', CLIENT_DEVICE_FAMILY = 'desktop';
 const DEFAULT_ROLE = 'node';
@@ -31,7 +31,7 @@ class GatewayClient {
     this.manualDisconnect = false;
     this.handshakePromise = null;
     this.protocolVersion = PROTOCOL_VERSION;
-    this.enableDeviceSignature = false;
+    this.enableDeviceSignature = true;
   }
   connect(url = this.defaultUrl, token = '') {
     this.url = typeof url === 'string' && url ? url : this.defaultUrl;
@@ -163,8 +163,10 @@ class GatewayClient {
       scopes,
       commands: [...DEFAULT_NODE_COMMANDS],
     };
+    if (this.enableDeviceSignature) {
+      params.device = await buildDeviceAuthSignature({ nonce, token, role, scopes, clientId: CLIENT_ID, clientMode: CLIENT_MODE, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY });
+    }
     if (token) params.auth = { token };
-    if (!token && this.enableDeviceSignature) params.auth = { device: await buildDeviceAuthSignature({ nonce, token, role, scopes, clientId: CLIENT_ID, clientMode: CLIENT_MODE, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY }) };
     return params;
   }
   _resolveConnect() { if (!this.connectResolve) return; const resolve = this.connectResolve; this.connectResolve = null; this.connectReject = null; resolve(); }
@@ -193,8 +195,8 @@ class GatewayClient {
   async chatHistory(sessionKey, limit) { const payload = await this.send('chat.history', { sessionKey, limit }); if (Array.isArray(payload)) return payload; return Array.isArray(payload?.messages) ? payload.messages : []; }
   chatAbort(sessionKey, runId) { return this.send('chat.abort', { sessionKey, runId }); }
   sessionsList() { return this.send('sessions.list', {}); }
-  nodeInvokeResult(requestId, ok, payload, error) {
-    return this.send('node.invoke.result', { requestId, ok, payload: ok ? payload : undefined, error: ok ? undefined : error });
+  nodeInvokeResult(requestId, nodeId, ok, payload, error) {
+    return this.send('node.invoke.result', { id: requestId, nodeId, ok, payload: ok ? payload : undefined, error: ok ? undefined : error });
   }
 }
 export { GatewayClient };
