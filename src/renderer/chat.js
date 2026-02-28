@@ -8,6 +8,8 @@ let currentStreamDiv = null;
 let currentStreamText = '';
 let currentRunId = null;
 let isStreaming = false;
+let assistantPending = false;
+let gatewayOnline = false;
 let lastRenderTime = 0;
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
@@ -77,13 +79,34 @@ function abortChat() {
   if (!isStreaming || !currentRunId) return;
   void gateway.chatAbort('default', currentRunId).catch(() => {});
 }
+function renderChatHeaderStatus() {
+  if (!chatHeaderStatus || !chatHeaderStatusText) return;
+
+  chatHeaderStatus.classList.remove('is-online', 'is-offline', 'is-connecting', 'is-typing');
+  if (!gatewayOnline) {
+    chatHeaderStatus.classList.add('is-offline');
+    chatHeaderStatusText.textContent = 'Offline';
+    return;
+  }
+
+  if (assistantPending || isStreaming) {
+    chatHeaderStatus.classList.add('is-typing');
+    chatHeaderStatusText.textContent = 'Typing...';
+    return;
+  }
+
+  chatHeaderStatus.classList.add('is-online');
+  chatHeaderStatusText.textContent = 'Online';
+}
 function resetStreamingState() {
   currentStreamDiv = null;
   currentStreamText = '';
   currentRunId = null;
   isStreaming = false;
+  assistantPending = false;
   lastRenderTime = 0;
   hideStopButton();
+  renderChatHeaderStatus();
 }
 
 async function loadChatHistory() {
@@ -129,9 +152,61 @@ function createStreamMessage() {
   scrollChatToBottom();
   return div;
 }
+function extractMessageContent(message) {
+  if (typeof message === 'string') return message;
+  if (!message || typeof message !== 'object') return '';
+
+  if (typeof message.text === 'string') return message.text;
+  if (typeof message.content === 'string') return message.content;
+
+  if (Array.isArray(message.content)) {
+    return message.content
+      .map((item) => (typeof item?.text === 'string' ? item.text : ''))
+      .join('');
+  }
+
+  return '';
+}
 function extractFrameText(frame) {
-  const fields = [frame?.delta, frame?.final, frame?.content, frame?.message, frame?.text];
-  return fields.find((item) => typeof item === 'string') || '';
+  const fields = [frame?.delta, frame?.final, frame?.content, frame?.text];
+  const direct = fields.find((item) => typeof item === 'string');
+  if (direct) return direct;
+  return extractMessageContent(frame?.message);
+}
+function longestSuffixPrefixOverlap(left, right) {
+  const maxLength = Math.min(left.length, right.length);
+  for (let size = maxLength; size > 0; size -= 1) {
+    if (left.slice(-size) === right.slice(0, size)) return size;
+  }
+  return 0;
+}
+function mergeStreamText(currentText, frame) {
+  const directDelta = typeof frame?.delta === 'string' ? frame.delta : '';
+  if (directDelta) return currentText + directDelta;
+
+  const snapshot = extractMessageContent(frame?.message);
+  if (!snapshot) return currentText;
+  if (!currentText || snapshot === currentText) return snapshot;
+
+  if (snapshot.startsWith(currentText)) return snapshot;
+  if (currentText.startsWith(snapshot)) return currentText;
+
+  const overlap = longestSuffixPrefixOverlap(currentText, snapshot);
+  if (overlap > 0) return currentText + snapshot.slice(overlap);
+
+  return snapshot;
+}
+function formatGatewayErrorMessage(rawMessage) {
+  const message = typeof rawMessage === 'string' && rawMessage.trim()
+    ? rawMessage.trim()
+    : 'Unknown error';
+  const normalized = message.toLowerCase();
+
+  const looksLikeRelayHeaderMismatch = normalized.includes('temporarily overloaded')
+    || normalized.includes('upstream service unavailable');
+  if (!looksLikeRelayHeaderMismatch) return message;
+
+  return `${message} Hint: if Claude Code works with the same relay, check OpenClaw provider headers/auth mode (Bearer auth + Claude CLI headers).`;
 }
 function handleGatewayChat(frame) {
   const eventState = typeof frame?.state === 'string' ? frame.state : '';
@@ -139,14 +214,16 @@ function handleGatewayChat(frame) {
     const delta = extractFrameText(frame);
     if (!delta) return;
     if (typeof frame?.runId === 'string' && frame.runId) currentRunId = frame.runId;
+    assistantPending = false;
     isStreaming = true;
     showStopButton();
+    renderChatHeaderStatus();
     if (!currentStreamDiv) {
       currentStreamDiv = createStreamMessage();
       currentStreamText = '';
       lastRenderTime = 0;
     }
-    currentStreamText += delta;
+    currentStreamText = mergeStreamText(currentStreamText, frame);
     if (Date.now() - lastRenderTime > 300) {
       renderBotMessage(currentStreamDiv, currentStreamText);
       lastRenderTime = Date.now();
@@ -168,21 +245,11 @@ function handleGatewayChat(frame) {
     return;
   }
   if (eventState === 'error') {
-    const message = frame?.error?.message || extractFrameText(frame) || 'Unknown error';
+    const rawMessage = frame?.error?.message || frame?.errorMessage || extractFrameText(frame);
+    const message = formatGatewayErrorMessage(rawMessage);
     resetStreamingState();
     appendMessage(`Gateway error: ${message}`, 'from-bot');
   }
-}
-function updateConnectionStatus(online) {
-  if (!chatHeaderStatus || !chatHeaderStatusText) return;
-  chatHeaderStatus.classList.remove('is-online', 'is-offline', 'is-connecting');
-  if (online) {
-    chatHeaderStatus.classList.add('is-online');
-    chatHeaderStatusText.textContent = 'Online';
-    return;
-  }
-  chatHeaderStatus.classList.add('is-offline');
-  chatHeaderStatusText.textContent = 'Offline';
 }
 
 export function sendChat() {
@@ -195,8 +262,12 @@ export function sendChat() {
     appendMessage('Not connected to OpenClaw. Open Gateway Settings to configure.', 'from-bot');
     return;
   }
+
+  assistantPending = true;
+  renderChatHeaderStatus();
   void gateway.chatSend('default', text).catch((err) => {
-    appendMessage(`Gateway error: ${err?.message || 'Failed to send message'}`, 'from-bot');
+    resetStreamingState();
+    appendMessage(`Gateway error: ${formatGatewayErrorMessage(err?.message || 'Failed to send message')}`, 'from-bot');
   });
 }
 export function initChat() {
@@ -216,12 +287,20 @@ export function initChat() {
 
   gateway.on('chat', handleGatewayChat);
   gateway.on('connected', () => {
-    updateConnectionStatus(true);
+    gatewayOnline = true;
+    renderChatHeaderStatus();
     void loadChatHistory();
   });
-  gateway.on('disconnected', () => updateConnectionStatus(false));
-  gateway.on('error', () => updateConnectionStatus(false));
+  gateway.on('disconnected', () => {
+    gatewayOnline = false;
+    resetStreamingState();
+  });
+  gateway.on('error', () => {
+    gatewayOnline = false;
+    resetStreamingState();
+  });
 
-  updateConnectionStatus(gateway.connected);
+  gatewayOnline = gateway.connected;
+  renderChatHeaderStatus();
   resizeChatInput();
 }
