@@ -82,6 +82,22 @@ function registerIpcHandlers(ipcMain) {
     new Notification({ title: 'TGClaw Process Exit', body: `${agentType} · ${projectName} exited with code ${String(exitCode)}` }).show();
   });
 
+  ipcMain.on('notify:chat-message', (event, payload) => {
+    const { title, body } = payload || {};
+    if (!title || !body) return;
+    if (typeof Notification.isSupported === 'function' && !Notification.isSupported()) return;
+    const notification = new Notification({ title, body });
+    notification.on('click', () => {
+      const window = BrowserWindow.fromWebContents(event.sender)
+        || BrowserWindow.getAllWindows().find((candidate) => !candidate.isDestroyed());
+      if (!window) return;
+      if (window.isMinimized()) window.restore();
+      window.show();
+      window.focus();
+    });
+    notification.show();
+  });
+
   ipcMain.on('app:set-title', (event, payload) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) return;
