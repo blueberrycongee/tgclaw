@@ -1,6 +1,7 @@
 import './styles.css';
 import { state } from './state.js';
 import { copyTextToClipboard, normalizeProject } from './utils.js';
+import { initStaticIcons } from './icons.js';
 import {
   configureSidebar,
   initSidebarBindings,
@@ -38,6 +39,7 @@ configureSidebar({ renderTabs, hideAllTerminals, closeTerminalSearch, updateWind
 configureTabs({ renderProjects, updateWindowTitle });
 configureChat({ updateOpenClawBadge });
 configureShortcuts({ addAgentTab, closeTab, switchTab });
+initStaticIcons();
 
 function bindGlobalEvents() {
   document.addEventListener('keydown', (event) => {

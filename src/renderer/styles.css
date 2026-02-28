@@ -88,6 +88,14 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+.ui-icon {
+  width: 1em;
+  height: 1em;
+  display: inline-block;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
 button,
 input,
 textarea {
@@ -118,12 +126,28 @@ a:hover {
 #sidebar-header {
   padding: 28px var(--spacing-4) var(--spacing-4);
   border-bottom: 1px solid var(--gray-300);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-2);
   font-size: var(--text-xl);
   font-weight: 600;
   line-height: var(--leading-tight);
   color: var(--gray-900);
   background: var(--background-2);
   -webkit-app-region: drag;
+}
+
+.brand-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+}
+
+.brand-text {
+  letter-spacing: 0.01em;
 }
 
 #project-list {
@@ -184,6 +208,7 @@ a:hover {
 .sidebar-item.pinned .icon {
   background: rgba(0, 112, 243, 0.15);
   border-color: rgba(0, 112, 243, 0.35);
+  color: var(--accent);
 }
 
 .item-info {
@@ -342,6 +367,22 @@ a:hover {
   text-overflow: ellipsis;
 }
 
+.tab-title-row {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-agent-icon {
+  color: var(--gray-600);
+}
+
+.tab.active .tab-agent-icon,
+.tab:hover .tab-agent-icon {
+  color: var(--gray-900);
+}
+
 .tab-exited-flag {
   font-size: var(--text-xs);
   color: var(--gray-600);
@@ -421,7 +462,7 @@ a:hover {
 }
 
 #add-tab {
-  font-size: 16px;
+  font-size: 0;
 }
 
 #add-tab:hover,
@@ -907,10 +948,22 @@ a:hover {
   border-color: var(--accent);
 }
 
-.agent-option .emoji {
-  width: 20px;
-  text-align: center;
-  font-size: 18px;
+.agent-option-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--gray-900);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.agent-option-label {
+  line-height: var(--leading-tight);
+}
+
+.action-glyph {
+  width: 14px;
+  height: 14px;
 }
 
 .input-modal-overlay {

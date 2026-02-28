@@ -8,11 +8,14 @@
 
   <!-- 左侧栏 -->
   <div id="sidebar">
-    <div id="sidebar-header">🐾 TGClaw</div>
+    <div id="sidebar-header">
+      <span class="brand-icon" id="brand-icon"></span>
+      <span class="brand-text">TGClaw</span>
+    </div>
 
     <!-- OpenClaw 置顶 -->
     <div class="sidebar-item pinned active" data-id="openclaw">
-      <div class="icon">🤖</div>
+      <div class="icon" id="openclaw-icon"></div>
       <div class="item-info">
         <div class="item-name-row">
           <div class="item-name">OpenClaw</div>
@@ -33,17 +36,17 @@
     <!-- Tab bar (项目模式才显示) -->
     <div id="tabbar">
       <div id="tab-list"></div>
-      <div id="add-tab">+</div>
-      <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Theme">🌙</button>
+      <div id="add-tab" title="New Tab"></div>
+      <button id="theme-toggle" class="theme-toggle-btn" title="Toggle Theme"></button>
     </div>
 
     <!-- 终端容器 -->
     <div id="terminal-container">
       <div id="terminal-search">
         <input id="terminal-search-input" type="text" placeholder="Search terminal..." />
-        <button class="terminal-search-btn" id="terminal-search-prev" title="Previous (Shift+Enter)">↑</button>
-        <button class="terminal-search-btn" id="terminal-search-next" title="Next (Enter)">↓</button>
-        <button class="terminal-search-btn" id="terminal-search-close" title="Close (Esc)">✕</button>
+        <button class="terminal-search-btn" id="terminal-search-prev" title="Previous (Shift+Enter)"></button>
+        <button class="terminal-search-btn" id="terminal-search-next" title="Next (Enter)"></button>
+        <button class="terminal-search-btn" id="terminal-search-close" title="Close (Esc)"></button>
       </div>
 
       <!-- Chat 面板 (OpenClaw) -->
@@ -55,16 +58,16 @@
               <span class="status-dot" id="chat-status-dot"></span>
               <span id="chat-status-text">Offline</span>
             </div>
-            <button id="gateway-settings-btn" class="chat-header-btn" title="Gateway Settings">⚙️</button>
+            <button id="gateway-settings-btn" class="chat-header-btn" title="Gateway Settings"></button>
           </div>
         </div>
         <div id="chat-messages">
-          <div class="message from-bot">Hey! I'm OpenClaw. Tell me what you need — I'll dispatch agents to get it done. 🐾</div>
+          <div class="message from-bot">Hey! I'm OpenClaw. Tell me what you need. I'll dispatch agents to get it done.</div>
         </div>
         <div id="chat-input-bar">
           <textarea id="chat-input" rows="1" placeholder="Message OpenClaw..."></textarea>
-          <button id="chat-stop" style="display:none" title="Stop generating">⏹</button>
-          <button id="chat-send">↑</button>
+          <button id="chat-stop" style="display:none" title="Stop generating"></button>
+          <button id="chat-send" title="Send"></button>
         </div>
       </div>
     </div>
@@ -75,19 +78,24 @@
     <div class="agent-picker-inner">
       <h3>Launch Agent</h3>
       <div class="agent-option" data-agent-type="claude-code">
-        <span class="emoji">🟠</span> Claude Code
+        <span class="agent-option-icon" data-agent-icon="claude-code"></span>
+        <span class="agent-option-label">Claude Code</span>
       </div>
       <div class="agent-option" data-agent-type="codex">
-        <span class="emoji">🟢</span> Codex
+        <span class="agent-option-icon" data-agent-icon="codex"></span>
+        <span class="agent-option-label">Codex</span>
       </div>
       <div class="agent-option" data-agent-type="goose">
-        <span class="emoji">🦆</span> Goose
+        <span class="agent-option-icon" data-agent-icon="goose"></span>
+        <span class="agent-option-label">Goose</span>
       </div>
       <div class="agent-option" data-agent-type="aider">
-        <span class="emoji">🔵</span> Aider
+        <span class="agent-option-icon" data-agent-icon="aider"></span>
+        <span class="agent-option-label">Aider</span>
       </div>
       <div class="agent-option" data-agent-type="shell">
-        <span class="emoji">⬛</span> Shell
+        <span class="agent-option-icon" data-agent-icon="shell"></span>
+        <span class="agent-option-label">Shell</span>
       </div>
     </div>
   </div>
@@ -96,7 +104,7 @@
     <div class="gateway-settings-inner">
       <div class="gateway-settings-header">
         <h3>Gateway Settings</h3>
-        <button id="gateway-settings-close" class="gateway-close-btn" title="Close">✕</button>
+        <button id="gateway-settings-close" class="gateway-close-btn" title="Close"></button>
       </div>
       <label class="gateway-field" for="gateway-url">
         Gateway URL

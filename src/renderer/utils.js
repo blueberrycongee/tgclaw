@@ -12,11 +12,6 @@ export function normalizeProject(project) {
   return { id: project.id, name: project.name, cwd: project.cwd };
 }
 
-export function agentEmoji(type) {
-  const map = { 'claude-code': '🟠', codex: '🟢', goose: '🦆', aider: '🔵', shell: '⬛' };
-  return map[type] || '⚪';
-}
-
 export function agentLabel(type) {
   const map = { 'claude-code': 'Claude Code', codex: 'Codex', goose: 'Goose', aider: 'Aider', shell: 'Shell' };
   return map[type] || type;

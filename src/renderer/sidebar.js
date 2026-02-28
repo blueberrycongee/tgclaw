@@ -1,5 +1,6 @@
 import { state } from './state.js';
 import { escapeHtml } from './utils.js';
+import { renderIcon } from './icons.js';
 import { showInputModal } from './modal.js';
 
 const deps = {
@@ -76,7 +77,7 @@ export function renderProjects() {
   const list = document.getElementById('project-list');
   list.innerHTML = state.projects.map((project) => {
     const activeCount = (state.tabs[project.id] || []).filter((tab) => !tab.exited).length;
-    return `<div class="sidebar-item ${state.currentItem === project.id ? 'active' : ''}" data-id="${project.id}" data-project-id="${project.id}" draggable="true"><div class="icon">📁</div><div class="item-info"><div class="item-name-row"><div class="item-name">${escapeHtml(project.name)}</div>${activeCount > 0 ? `<span class="item-badge">${activeCount}</span>` : ''}</div><div class="item-status">${escapeHtml(project.cwd)}</div></div></div>`;
+    return `<div class="sidebar-item ${state.currentItem === project.id ? 'active' : ''}" data-id="${project.id}" data-project-id="${project.id}" draggable="true"><div class="icon">${renderIcon('folder', { size: 16, className: 'sidebar-glyph' })}</div><div class="item-info"><div class="item-name-row"><div class="item-name">${escapeHtml(project.name)}</div>${activeCount > 0 ? `<span class="item-badge">${activeCount}</span>` : ''}</div><div class="item-status">${escapeHtml(project.cwd)}</div></div></div>`;
   }).join('');
 
   list.querySelectorAll('.sidebar-item[data-project-id]').forEach((item) => {
