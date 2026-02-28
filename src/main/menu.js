@@ -24,6 +24,12 @@ function setupApplicationMenu() {
         ...switchTabMenuItems,
       ],
     },
+    {
+      label: 'Chat',
+      submenu: [
+        { label: 'Clear Chat', accelerator: 'CommandOrControl+K', click: () => sendShortcutAction('clear-chat') },
+      ],
+    },
     { role: 'editMenu' },
     { role: 'viewMenu' },
   ];
