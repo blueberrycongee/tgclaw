@@ -327,6 +327,14 @@ a:hover {
   --dot-color: var(--terminal-done);
 }
 
+.item-status-dots {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-1);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
 @keyframes tgclaw-dot-pulse {
   0% {
     transform: scale(1);

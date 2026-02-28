@@ -12,42 +12,52 @@ export function configureProjects({ selectItem }) {
 
 function getProjectTerminalState(projectTabs) {
   const tabs = Array.isArray(projectTabs) ? projectTabs : [];
-  if (tabs.length === 0) {
-    return { showDot: false, state: 'none', label: '', latestActivityAt: 0 };
-  }
+  return tabs.map((tab) => {
+    const lastActivityAt = typeof tab?.getLastActivityAt === 'function' ? Number(tab.getLastActivityAt()) || 0 : 0;
+    if (tab?.exited) {
+      return {
+        tabId: tab.id,
+        showDot: true,
+        state: 'done',
+        label: 'Done',
+        latestActivityAt,
+      };
+    }
 
-  const activeTabs = tabs.filter((tab) => !tab?.exited);
-  if (activeTabs.length === 0) {
-    return { showDot: true, state: 'done', label: 'Done', latestActivityAt: 0 };
-  }
-
-  const now = Date.now();
-  const lastActivityAt = activeTabs.reduce((latest, tab) => {
-    const tabActivity = typeof tab?.getLastActivityAt === 'function'
-      ? tab.getLastActivityAt()
-      : 0;
-    return Math.max(latest, Number(tabActivity) || 0);
-  }, 0);
-  const currentState = now - lastActivityAt <= IDLE_ACTIVITY_WINDOW_MS ? 'working' : 'idle';
-  return {
-    showDot: true,
-    state: currentState,
-    label: currentState === 'working' ? 'Working' : 'Idle',
-    latestActivityAt: lastActivityAt,
-  };
+    const now = Date.now();
+    const state = now - lastActivityAt <= IDLE_ACTIVITY_WINDOW_MS ? 'working' : 'idle';
+    return {
+      tabId: tab.id,
+      showDot: true,
+      state,
+      label: state === 'working' ? 'Working' : 'Idle',
+      latestActivityAt,
+    };
+  });
 }
 
-function isProjectAttentionNeeded(projectId, terminalState, isActiveProject) {
+function isProjectAttentionNeeded(projectId, terminalState, isActiveProject, previousProjectState) {
   if (!terminalState.showDot || isActiveProject) return false;
 
   const lastSeenAt = typeof projectId === 'string' && Number(state.projectLastSeenAt[projectId]) ? Number(state.projectLastSeenAt[projectId]) : 0;
-  const hadNewActivity = terminalState.latestActivityAt > lastSeenAt;
-  if (hadNewActivity) return true;
+  if (terminalState.latestActivityAt > lastSeenAt) return true;
 
-  const previousState = state.projectTerminalState[projectId];
-  if (previousState && previousState !== terminalState.state) return true;
+  const previousState = previousProjectState?.[terminalState.tabId];
+  if (!previousState) return false;
+  if (previousState.state !== terminalState.state) return true;
+  if (terminalState.state === 'done' && previousState.latestActivityAt !== terminalState.latestActivityAt) return true;
 
   return false;
+}
+
+function getProjectTerminalStateLabel(terminalStates) {
+  if (!terminalStates.length) return '';
+  const stateWeight = { done: 0, idle: 1, working: 2 };
+  const dominant = terminalStates.reduce((acc, item) => {
+    if ((stateWeight[item.state] || 0) > (stateWeight[acc.state] || 0)) return item;
+    return acc;
+  }, terminalStates[0]);
+  return `Terminals: ${terminalStates.length} (${dominant.label})`;
 }
 
 export function markProjectAsSeen(projectId) {
@@ -80,21 +90,32 @@ export function renderProjects() {
     const projectTabs = state.tabs[project.id] || [];
     const terminalState = getProjectTerminalState(projectTabs);
     const isActiveProject = state.currentItem === project.id;
-    const needsAttention = isProjectAttentionNeeded(project.id, terminalState, isActiveProject);
-    const shouldRecordState = terminalState.showDot;
-    if (shouldRecordState && state.projectTerminalState[project.id] !== terminalState.state) {
-      state.projectTerminalState[project.id] = terminalState.state;
-    }
+    const previousProjectState = state.projectTerminalState[project.id] || {};
+    const terminalDots = terminalState.map((item, index) => {
+      const needsAttention = isProjectAttentionNeeded(project.id, item, isActiveProject, previousProjectState);
+      const pulseClass = needsAttention ? ' item-status-dot--attention' : '';
+      const title = `${item.label} #${index + 1}`;
+      return item.showDot
+        ? `<span class="item-status-dot item-status-dot--${item.state}${pulseClass}" title="${title}" aria-label="${title}"></span>`
+        : '';
+    }).filter(Boolean).join('');
 
-    const pulseClass = needsAttention ? ' item-status-dot--attention' : '';
-    const terminalDot = terminalState.showDot
-      ? `<span class="item-status-dot item-status-dot--${terminalState.state}${pulseClass}" title="${terminalState.label}" aria-label="${terminalState.label}"></span>`
-      : '';
-    const itemStatus = terminalState.showDot
-      ? `<div class="item-status-row"><span class="item-status">${escapeHtml(project.cwd)}</span>${terminalDot}</div>`
+    const nextProjectState = terminalState.reduce((acc, item) => {
+      if (!item.showDot) return acc;
+      acc[item.tabId] = {
+        state: item.state,
+        latestActivityAt: item.latestActivityAt,
+      };
+      return acc;
+    }, {});
+    state.projectTerminalState[project.id] = nextProjectState;
+
+    const itemStatus = terminalState.length > 0
+      ? `<div class="item-status-row"><span class="item-status">${escapeHtml(project.cwd)}</span><div class="item-status-dots">${terminalDots}</div></div>`
       : `<div class="item-status">${escapeHtml(project.cwd)}</div>`;
+    const itemStatusLabel = terminalState.length > 0 ? ` title="${getProjectTerminalStateLabel(terminalState)}"` : '';
 
-    return `<div class="sidebar-item ${state.currentItem === project.id ? 'active' : ''}" data-id="${project.id}" data-project-id="${project.id}" draggable="true"><div class="icon">${renderIcon('folder', { size: 16, className: 'sidebar-glyph' })}</div><div class="item-info"><div class="item-name-row"><div class="item-name">${escapeHtml(project.name)}</div></div>${itemStatus}</div></div>`;
+    return `<div class="sidebar-item ${state.currentItem === project.id ? 'active' : ''}" data-id="${project.id}" data-project-id="${project.id}" draggable="true" ${itemStatusLabel}><div class="icon">${renderIcon('folder', { size: 16, className: 'sidebar-glyph' })}</div><div class="item-info"><div class="item-name-row"><div class="item-name">${escapeHtml(project.name)}</div></div>${itemStatus}</div></div>`;
   }).join('');
 
   list.querySelectorAll('.sidebar-item[data-project-id]').forEach((item) => {
