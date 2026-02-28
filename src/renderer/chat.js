@@ -22,6 +22,7 @@ let pendingTimeoutHandle = null;
 let streamIdleTimeoutHandle = null;
 let lastAssistantActivityAt = 0;
 export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
+export { reloadChatHistory };
 function normalizeSessionKeyForGateway(sessionKey) {
   const key = typeof sessionKey === 'string' && sessionKey.trim() ? sessionKey.trim() : 'default';
   const mainSessionKey = gatewayMainSessionKey || DEFAULT_MAIN_SESSION_KEY;
