@@ -1,0 +1,47 @@
+/* Constrain all rendered markdown content to stay inside the message bubble. */
+#chat-messages .message.from-bot {
+  overflow: hidden;
+}
+
+#chat-messages .message.from-bot > :first-child {
+  margin-top: 0;
+}
+
+#chat-messages .message.from-bot > :last-child {
+  margin-bottom: 0;
+}
+
+#chat-messages .message.from-bot :where(p, ul, ol, li, blockquote, pre, code, table, thead, tbody, tr, td, th) {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+#chat-messages .message.from-bot p {
+  margin: 0.4em 0;
+}
+
+#chat-messages .message.from-bot ul,
+#chat-messages .message.from-bot ol {
+  margin: 0.4em 0;
+  padding-left: 1.2em;
+  list-style-position: inside;
+}
+
+#chat-messages .message.from-bot li {
+  margin: 0.2em 0;
+}
+
+#chat-messages .message.from-bot code:not(pre code) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+#chat-messages .message.from-bot pre {
+  overflow-x: auto;
+}
+
+#chat-messages .message.from-bot table {
+  display: block;
+  overflow-x: auto;
+}
