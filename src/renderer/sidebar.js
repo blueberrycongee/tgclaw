@@ -3,6 +3,7 @@ import { escapeHtml } from './utils.js';
 import { updateEmptyState } from './chat-messages.js';
 import { showInputModal } from './modal.js';
 import { addProject, configureProjects, deleteProject, renameProject } from './projects.js';
+import { removeCachedSession, upsertCachedSession } from './chat-cache.js';
 
 const deps = {
   renderTabs: () => {},
@@ -99,6 +100,7 @@ function deleteSession(sessionKey) {
   const index = state.sessions.findIndex((session) => session?.sessionKey === sessionKey);
   if (index === -1) return;
   state.sessions.splice(index, 1);
+  removeCachedSession(sessionKey);
   if (state.currentItem === `session:${sessionKey}`) selectItem('openclaw');
   renderSessions();
 }
@@ -116,6 +118,7 @@ async function renameSession(sessionKey) {
   const nextLabel = input.trim();
   if (!nextLabel || nextLabel === session.label) return;
   session.label = nextLabel;
+  upsertCachedSession({ sessionKey, label: nextLabel, updatedAt: Date.now() });
   renderSessions();
   if (state.currentItem === `session:${sessionKey}`) deps.updateChatHeader();
 }
@@ -124,7 +127,9 @@ function createNewChatSession() {
   const sessionKey = `chat-${Date.now()}`;
   const existingSessions = Array.isArray(state.sessions) ? state.sessions : [];
   if (!existingSessions.some((item) => item?.sessionKey === sessionKey)) {
-    state.sessions = [{ sessionKey, label: 'New Chat' }, ...existingSessions];
+    const createdSession = { sessionKey, label: 'New Chat', updatedAt: Date.now() };
+    state.sessions = [createdSession, ...existingSessions];
+    upsertCachedSession(createdSession);
   }
   renderSessions();
   selectItem(`session:${sessionKey}`);
