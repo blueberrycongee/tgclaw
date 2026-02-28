@@ -5,6 +5,8 @@ import { closeTerminalSearch, createTerminal, hideAllTerminals, showTerminal } f
 const deps = { renderProjects: () => {}, updateWindowTitle: () => {} };
 let agentPickerSelectionLocked = false;
 let addTabHoverHideTimer = null;
+let addTabDefaultAgent = 'shell';
+const ADD_TAB_DEFAULT_KEY = 'tgclaw:add-tab-default-agent';
 export function configureTabs(nextDeps) { Object.assign(deps, nextDeps); }
 export function getTabDisplayName(tab) { return tab.customName || agentLabel(tab.type); }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
@@ -217,6 +219,41 @@ function scheduleHideAddTabHoverMenu() {
   addTabHoverHideTimer = setTimeout(() => hideAddTabHoverMenu(), 120);
 }
 
+function getAddTabOptionTypes() {
+  return Array.from(document.querySelectorAll('#add-tab-hover-menu .tab-add-option[data-agent-type]'))
+    .map((option) => option.dataset.agentType)
+    .filter(Boolean);
+}
+
+function resolveDefaultAgent() {
+  const optionTypes = getAddTabOptionTypes();
+  if (optionTypes.length === 0) return 'shell';
+  const saved = localStorage.getItem(ADD_TAB_DEFAULT_KEY);
+  if (saved && optionTypes.includes(saved)) return saved;
+  if (optionTypes.includes('shell')) return 'shell';
+  return optionTypes[0];
+}
+
+function updateAddTabDefaultUi() {
+  const label = agentLabel(addTabDefaultAgent);
+  const addTabButton = document.getElementById('add-tab');
+  const badge = document.getElementById('add-tab-default-badge');
+  if (addTabButton) addTabButton.title = `New Tab (${label})`;
+  if (badge) badge.textContent = `Default: ${label}`;
+
+  document.querySelectorAll('#add-tab-hover-menu .tab-add-option').forEach((option) => {
+    const isDefault = option.dataset.agentType === addTabDefaultAgent;
+    option.classList.toggle('is-default', isDefault);
+  });
+}
+
+function setDefaultAgent(type) {
+  if (!type || typeof type !== 'string') return;
+  addTabDefaultAgent = type;
+  localStorage.setItem(ADD_TAB_DEFAULT_KEY, type);
+  updateAddTabDefaultUi();
+}
+
 export function showAgentPicker() {
   agentPickerSelectionLocked = false;
   hideAddTabHoverMenu();
@@ -231,25 +268,32 @@ export function initAgentPicker() {
   const addTabButton = document.getElementById('add-tab');
   const addTabHoverMenu = getAddTabHoverMenu();
   if (addTabButton && addTabHoverMenu) {
+    addTabDefaultAgent = resolveDefaultAgent();
+    updateAddTabDefaultUi();
+
     addTabButton.addEventListener('mouseenter', () => showAddTabHoverMenu());
     addTabButton.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
     addTabButton.addEventListener('click', (event) => {
       event.preventDefault();
       event.stopPropagation();
-      showAddTabHoverMenu();
+      hideAddTabHoverMenu();
+      void addAgentTab(addTabDefaultAgent);
     });
 
     addTabHoverMenu.addEventListener('mouseenter', () => clearAddTabHoverHideTimer());
     addTabHoverMenu.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
-    addTabHoverMenu.querySelectorAll('.tab-add-option').forEach((option) => option.addEventListener('click', () => {
+    addTabHoverMenu.querySelectorAll('.tab-add-option').forEach((option) => option.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const type = option.dataset.agentType;
       if (!type || agentPickerSelectionLocked) return;
       agentPickerSelectionLocked = true;
       option.classList.add('pick-feedback');
       setTimeout(() => {
         option.classList.remove('pick-feedback');
+        setDefaultAgent(type);
         hideAddTabHoverMenu();
-        addAgentTab(type);
+        void addAgentTab(type);
         agentPickerSelectionLocked = false;
       }, 120);
     }));

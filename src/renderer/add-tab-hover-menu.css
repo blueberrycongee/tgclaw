@@ -18,6 +18,19 @@
   display: block;
 }
 
+.add-tab-default-badge {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 var(--spacing-2);
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  color: var(--gray-600);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
 .tab-add-option {
   width: 100%;
   height: 32px;
@@ -43,6 +56,18 @@
 .tab-add-option.pick-feedback {
   background: var(--gray-100);
   border-color: var(--accent);
+}
+
+.tab-add-option.is-default {
+  border-color: rgba(0, 112, 243, 0.35);
+  background: rgba(0, 112, 243, 0.08);
+}
+
+.tab-add-option.is-default::after {
+  content: 'Default';
+  margin-left: auto;
+  color: var(--accent);
+  font-size: var(--text-xs);
 }
 
 .tab-add-option-icon {
