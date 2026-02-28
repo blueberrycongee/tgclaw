@@ -1,12 +1,13 @@
 import { buildDeviceAuthSignature, randomId } from './gateway-identity.js';
 const PROTOCOL_VERSION = 3;
-const CLIENT_ID = 'cli';
+const CLIENT_ID = 'tgclaw';
 const CLIENT_MODE = 'cli';
 const CLIENT_VERSION = '1.0.0';
 const CLIENT_PLATFORM = 'electron';
 const CLIENT_DEVICE_FAMILY = 'desktop';
-const DEFAULT_ROLE = 'operator';
+const DEFAULT_ROLE = 'node';
 const DEFAULT_SCOPES = ['operator.admin', 'operator.read', 'operator.write'];
+const DEFAULT_NODE_COMMANDS = ['system.run'];
 const RECONNECT_DELAY_MS = 5000;
 const MAX_RECONNECT_ATTEMPTS = 10;
 function buildError(message, code, details) {
@@ -113,6 +114,7 @@ class GatewayClient {
   _handleEventFrame(frame) {
     if (frame.event === 'connect.challenge') return void this._handleConnectChallenge(frame.payload);
     if (frame.event === 'chat') return this._emit('chat', frame.payload ?? frame.data ?? frame.params ?? frame);
+    if (frame.event === 'node.invoke.request') return this._emit('node.invoke.request', frame.payload ?? frame);
     this._emit('event', frame);
   }
   async _handleConnectChallenge(payload) {
@@ -161,6 +163,7 @@ class GatewayClient {
       client: { id: CLIENT_ID, displayName: 'TGClaw', version: CLIENT_VERSION, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY, mode: CLIENT_MODE },
       role,
       scopes,
+      commands: [...DEFAULT_NODE_COMMANDS],
     };
     if (token) params.auth = { token };
     if (!token && this.enableDeviceSignature) params.auth = { device: await buildDeviceAuthSignature({ nonce, token, role, scopes, clientId: CLIENT_ID, clientMode: CLIENT_MODE, platform: CLIENT_PLATFORM, deviceFamily: CLIENT_DEVICE_FAMILY }) };
@@ -192,5 +195,8 @@ class GatewayClient {
   async chatHistory(sessionKey, limit) { const payload = await this.send('chat.history', { sessionKey, limit }); if (Array.isArray(payload)) return payload; return Array.isArray(payload?.messages) ? payload.messages : []; }
   chatAbort(sessionKey, runId) { return this.send('chat.abort', { sessionKey, runId }); }
   sessionsList() { return this.send('sessions.list', {}); }
+  nodeInvokeResult(requestId, ok, payload, error) {
+    return this.send('node.invoke.result', { requestId, ok, payload: ok ? payload : undefined, error: ok ? undefined : error });
+  }
 }
 export { GatewayClient };
