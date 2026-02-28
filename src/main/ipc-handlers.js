@@ -62,6 +62,15 @@ function registerIpcHandlers(ipcMain) {
     ]), event);
   });
 
+  ipcMain.on('session:show-context-menu', (event, { sessionKey }) => {
+    if (!sessionKey) return;
+    popupForSender(Menu.buildFromTemplate([
+      { label: 'Rename Session', click: () => event.sender.send('session:rename', { sessionKey }) },
+      { type: 'separator' },
+      { label: 'Delete Session', click: () => event.sender.send('session:delete', { sessionKey }) },
+    ]), event);
+  });
+
   ipcMain.on('tab:show-context-menu', (event, payload) => {
     const { projectId, tabId, tabType, tabName } = payload || {};
     if (!projectId || !tabId) return;
