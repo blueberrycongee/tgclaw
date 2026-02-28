@@ -170,7 +170,7 @@ export async function addAgentTab(type, options = {}) {
     },
     onRestart: () => {
       closeTab(project.id, tabId);
-      addAgentTab(type, { command, commandArgs, projectId: project.id });
+      void addAgentTab(type, { command, commandArgs, projectId: project.id });
     },
   });
   const tabRecord = { id: tabId, type: tabType, customName: '', terminalSessionId: normalizeTerminalSessionId(terminal?.terminalSessionId || requestedSessionId), ...terminal };
