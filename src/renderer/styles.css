@@ -1126,6 +1126,11 @@ a:hover {
   margin-right: auto;
   border-bottom-left-radius: 4px;
 }
+.message.message-error {
+  border-left: 3px solid #e74c3c;
+  background: rgba(231, 76, 60, 0.08);
+  color: #e74c3c;
+}
 .message-time {
   display: block;
   font-size: 10px;
