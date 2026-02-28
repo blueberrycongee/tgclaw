@@ -1196,6 +1196,10 @@ a:hover {
   color: var(--gray-600);
 }
 
+#gateway-connection-status.pairing {
+  color: var(--warning, #f39c12);
+}
+
 .message {
   width: fit-content;
   max-width: min(72%, 76ch);

@@ -6,6 +6,7 @@ const DEFAULT_SCOPES = ['operator.admin', 'operator.read', 'operator.write'];
 const DEFAULT_NODE_COMMANDS = ['system.run', 'system.execApprovals.get', 'system.execApprovals.set'];
 const RECONNECT_DELAY_MS = 5000;
 const MAX_RECONNECT_ATTEMPTS = 10;
+const PAIRING_RETRY_DELAY_MS = 3000;
 function buildError(message, code, details) {
   const error = new Error(code ? `${message} (${code})` : message);
   if (code) error.code = code;
@@ -34,6 +35,7 @@ class GatewayClient {
     this.clientId = options.clientId || 'tgclaw';
     this.clientMode = options.clientMode || 'operator';
     this.commands = options.commands || [];
+    this.pairingRequired = false;
   }
   connect(url = this.defaultUrl, token = '') {
     this.url = typeof url === 'string' && url ? url : this.defaultUrl;
@@ -75,7 +77,7 @@ class GatewayClient {
       };
       ws.onmessage = (event) => this._onMessage(event.data);
       ws.onerror = () => this._onError(new Error('Gateway WebSocket error'));
-      ws.onclose = () => this._onClose();
+      ws.onclose = (event) => this._onClose(event);
     }).finally(() => {
       this.connectPromise = null;
       this.connectResolve = null;
@@ -141,10 +143,18 @@ class GatewayClient {
         if (!hello || hello.type !== 'hello-ok') throw new Error('Gateway connect handshake failed');
         this.connected = true;
         this.reconnectAttempts = 0;
+        this.pairingRequired = false;
         this._emit('connected', hello);
         this._resolveConnect();
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));
+        const isPairingRequired = error.message?.includes('pairing required') || error.code === 'PAIRING_REQUIRED';
+        if (isPairingRequired) {
+          this.pairingRequired = true;
+          this._emit('pairing-required', { deviceId: error.details?.deviceId, requestId: error.details?.requestId });
+          this._schedulePairingRetry();
+          return;
+        }
         this._onError(error);
         this._rejectConnect(error);
         this.ws?.close(4008, 'connect failed');
@@ -175,7 +185,21 @@ class GatewayClient {
   }
   _resolveConnect() { if (!this.connectResolve) return; const resolve = this.connectResolve; this.connectResolve = null; this.connectReject = null; resolve(); }
   _rejectConnect(error) { if (!this.connectReject) return; const reject = this.connectReject; this.connectResolve = null; this.connectReject = null; reject(error); }
-  _onClose() { const shouldReconnect = !this.manualDisconnect; this._setDisconnected(); this._emit('disconnected'); if (shouldReconnect) this._scheduleReconnect(); }
+  _onClose(event) {
+    const reason = event?.reason || '';
+    const isPairingRequired = reason.includes('pairing required') || reason.includes('pairing-required');
+    if (isPairingRequired) {
+      this.pairingRequired = true;
+      this._emit('pairing-required', {});
+      this._setDisconnected();
+      this._schedulePairingRetry();
+      return;
+    }
+    const shouldReconnect = !this.manualDisconnect;
+    this._setDisconnected();
+    this._emit('disconnected');
+    if (shouldReconnect) this._scheduleReconnect();
+  }
   _onError(err) { this._emit('error', err instanceof Error ? err : new Error(String(err))); }
   _setDisconnected() { this.connected = false; this.ws = null; this.handshakePromise = null; this._rejectConnect(new Error('Gateway disconnected')); this._rejectPending(new Error('Gateway disconnected')); }
   _clearReconnectTimer() { if (!this.reconnectTimer) return; clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
@@ -189,6 +213,15 @@ class GatewayClient {
         if (!this.connected && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) this._scheduleReconnect();
       });
     }, RECONNECT_DELAY_MS);
+  }
+  _schedulePairingRetry() {
+    if (this.reconnectTimer || this.manualDisconnect || !this.url) return;
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      this._openSocket().catch(() => {
+        if (!this.connected && this.pairingRequired) this._schedulePairingRetry();
+      });
+    }, PAIRING_RETRY_DELAY_MS);
   }
   _emit(event, payload) {
     this.listeners.get(event)?.forEach((callback) => {

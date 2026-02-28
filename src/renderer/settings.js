@@ -53,6 +53,7 @@ export async function initSettings() {
   });
   gateway.on('disconnected', () => updateConnectionStatus('disconnected'));
   gateway.on('error', () => updateConnectionStatus('disconnected'));
+  gateway.on('pairing-required', () => updateConnectionStatus('pairing'));
 
   updateConnectionStatus(gateway.connected ? 'connected' : 'disconnected');
   await ensureChatCacheLoaded();
@@ -176,11 +177,17 @@ export function handleDisconnect() {
 export function updateConnectionStatus(status) {
   if (!statusText) return;
 
-  statusText.classList.remove('connected', 'connecting', 'disconnected', 'unconfigured');
+  statusText.classList.remove('connected', 'connecting', 'disconnected', 'unconfigured', 'pairing');
 
   if (status === 'connecting') {
     statusText.textContent = 'Connecting...';
     statusText.classList.add('connecting');
+    return;
+  }
+
+  if (status === 'pairing') {
+    statusText.textContent = 'Waiting for approval...';
+    statusText.classList.add('pairing');
     return;
   }
 
