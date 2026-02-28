@@ -169,10 +169,16 @@ export async function addAgentTab(type, options = {}) {
   });
   state.tabs[project.id].push({ id: tabId, type: tabType, customName: '', ...terminal });
   state.activeTab[project.id] = tabId;
-  renderTabs(project.id);
+
+  const isActiveProject = state.currentItem === project.id;
+  if (isActiveProject) {
+    renderTabs(project.id);
+  }
   deps.renderProjects();
   deps.updateWindowTitle();
-  setTimeout(() => terminal.fitAddon.fit(), 150);
+  if (isActiveProject) {
+    setTimeout(() => terminal.fitAddon.fit(), 150);
+  }
 }
 export function closeTab(projectId, tabId) {
   const projectTabs = state.tabs[projectId] || [];
