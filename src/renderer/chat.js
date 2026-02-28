@@ -1,6 +1,23 @@
-import { marked } from 'marked';
+import { Marked } from 'marked';
+import { markedHighlight } from 'marked-highlight';
+import hljs from 'highlight.js';
+import 'highlight.js/styles/github-dark.css';
 import { state } from './state.js';
 import { gateway } from './gateway.js';
+
+const marked = new Marked(
+  markedHighlight({
+    emptyLangClass: 'hljs',
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+      const normalizedLang = typeof lang === 'string' ? lang.trim().split(/\s+/, 1)[0] : '';
+      if (normalizedLang && hljs.getLanguage(normalizedLang)) {
+        return hljs.highlight(code, { language: normalizedLang }).value;
+      }
+      return hljs.highlightAuto(code).value;
+    },
+  }),
+);
 
 let updateOpenClawBadgeRef = () => {};
 let chatInput = null;
