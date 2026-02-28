@@ -4,17 +4,76 @@ import { state } from './state.js';
 import { gateway } from './gateway.js';
 import { renderSessions, selectItem } from './sidebar.js';
 import { appendCachedMessage, ensureChatCacheLoaded, getCachedMessages, getCachedSessions, setCachedMessages } from './chat-cache.js';
+const INITIAL_RESPONSE_TIMEOUT_MS = 12000;
+const STREAM_IDLE_TIMEOUT_MS = 18000;
+const HISTORY_RECOVERY_POLL_MS = 3000;
+const HISTORY_RECOVERY_STALE_MS = 90000;
+const DEFAULT_MAIN_SESSION_KEY = 'main';
 let chatInput = null;
 let currentRunId = null;
 let currentRunKey = '';
 let isStreaming = false;
 let assistantPending = false;
+let assistantStalled = false;
 let gatewayOnline = false;
+let gatewayMainSessionKey = DEFAULT_MAIN_SESSION_KEY;
+let gatewayMainKey = DEFAULT_MAIN_SESSION_KEY;
+let gatewayDefaultAgentId = '';
 const streamRuns = new Map();
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
 let typingIndicatorDiv = null;
+let pendingTimeoutHandle = null;
+let streamIdleTimeoutHandle = null;
+let historyRecoveryTimer = null;
+let historyRecoveryInFlight = false;
+let lastAssistantActivityAt = 0;
+let pendingChatRequest = null;
 export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
+function normalizeSessionKeyForGateway(sessionKey) {
+  const key = typeof sessionKey === 'string' && sessionKey.trim() ? sessionKey.trim() : 'default';
+  const mainSessionKey = gatewayMainSessionKey || DEFAULT_MAIN_SESSION_KEY;
+  const mainKey = gatewayMainKey || DEFAULT_MAIN_SESSION_KEY;
+  if (key === 'default' || key === DEFAULT_MAIN_SESSION_KEY || key === mainKey || key === mainSessionKey) {
+    return mainSessionKey;
+  }
+  if (gatewayDefaultAgentId) {
+    const aliases = [
+      `agent:${gatewayDefaultAgentId}:main`,
+      `agent:${gatewayDefaultAgentId}:${mainKey}`,
+    ];
+    if (aliases.includes(key)) return mainSessionKey;
+  }
+  return key;
+}
+function applyGatewaySessionDefaults(helloPayload) {
+  const defaults = helloPayload?.snapshot?.sessionDefaults;
+  const mainSessionKey = typeof defaults?.mainSessionKey === 'string' && defaults.mainSessionKey.trim()
+    ? defaults.mainSessionKey.trim()
+    : DEFAULT_MAIN_SESSION_KEY;
+  gatewayMainSessionKey = mainSessionKey;
+  gatewayMainKey = typeof defaults?.mainKey === 'string' && defaults.mainKey.trim()
+    ? defaults.mainKey.trim()
+    : DEFAULT_MAIN_SESSION_KEY;
+  gatewayDefaultAgentId = typeof defaults?.defaultAgentId === 'string' ? defaults.defaultAgentId.trim() : '';
+}
+function normalizeAssistantMessage(message, options = {}) {
+  if (!message || typeof message !== 'object') return null;
+  const candidate = message;
+  const requireRole = options.requireRole === true;
+  const roleValue = typeof candidate.role === 'string' ? candidate.role.toLowerCase() : '';
+  if (requireRole && roleValue !== 'assistant') return null;
+  if (roleValue && roleValue !== 'assistant') return null;
+  if (!('content' in candidate) && !('text' in candidate)) return null;
+  return candidate;
+}
+function shouldReloadHistoryForFinalFrame(frame) {
+  if (frame?.state !== 'final') return false;
+  const message = frame?.message;
+  if (!message || typeof message !== 'object') return true;
+  const role = typeof message.role === 'string' ? message.role.toLowerCase() : '';
+  return Boolean(role && role !== 'assistant');
+}
 export function updateChatHeader() {
   const title = document.querySelector('.chat-header-title');
   if (!title) return;
@@ -52,15 +111,79 @@ function showTypingIndicator() {
   updateEmptyState();
   scrollChatToBottom();
 }
+function clearPendingTimeout() {
+  if (!pendingTimeoutHandle) return;
+  clearTimeout(pendingTimeoutHandle);
+  pendingTimeoutHandle = null;
+}
+function clearStreamIdleTimeout() {
+  if (!streamIdleTimeoutHandle) return;
+  clearTimeout(streamIdleTimeoutHandle);
+  streamIdleTimeoutHandle = null;
+}
+function clearHistoryRecoveryTimer() {
+  if (!historyRecoveryTimer) return;
+  clearInterval(historyRecoveryTimer);
+  historyRecoveryTimer = null;
+}
+function clearAssistantWatchdogs() {
+  clearPendingTimeout();
+  clearStreamIdleTimeout();
+  clearHistoryRecoveryTimer();
+}
+function scheduleStreamIdleTimeout() {
+  clearStreamIdleTimeout();
+  if (!assistantPending && !isStreaming) return;
+  streamIdleTimeoutHandle = setTimeout(() => {
+    if (!assistantPending && !isStreaming) return;
+    if (Date.now() - lastAssistantActivityAt < STREAM_IDLE_TIMEOUT_MS - 50) {
+      scheduleStreamIdleTimeout();
+      return;
+    }
+    assistantStalled = true;
+    clearTypingIndicator();
+    renderChatHeaderStatus();
+  }, STREAM_IDLE_TIMEOUT_MS);
+}
+function touchAssistantActivity() {
+  lastAssistantActivityAt = Date.now();
+  if (assistantStalled) assistantStalled = false;
+  clearPendingTimeout();
+  scheduleStreamIdleTimeout();
+}
+function armInitialResponseTimeout() {
+  clearPendingTimeout();
+  pendingTimeoutHandle = setTimeout(() => {
+    if (!assistantPending || isStreaming || streamRuns.size > 0) return;
+    assistantStalled = true;
+    clearTypingIndicator();
+    renderChatHeaderStatus();
+  }, INITIAL_RESPONSE_TIMEOUT_MS);
+}
+function beginAssistantPending() {
+  const sessionKey = state.currentSessionKey || 'default';
+  const assistantCountAtSend = getCachedMessages(sessionKey).filter((message) => message?.role === 'assistant').length;
+  pendingChatRequest = {
+    sessionKey,
+    startedAt: Date.now(),
+    assistantCountAtSend,
+  };
+  assistantPending = true;
+  assistantStalled = false;
+  showTypingIndicator();
+  touchAssistantActivity();
+  armInitialResponseTimeout();
+  startHistoryRecoveryLoop();
+}
 function showStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'inline-flex'; }
 function hideStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'none'; }
 function abortChat() {
   if (!isStreaming || !currentRunId) return;
-  void gateway.chatAbort(state.currentSessionKey, currentRunId).catch(() => {});
+  void gateway.chatAbort(normalizeSessionKeyForGateway(state.currentSessionKey), currentRunId).catch(() => {});
 }
 function activeRunEntriesForSession(sessionKey) {
-  const key = sessionKey || 'default';
-  return Array.from(streamRuns.entries()).filter(([, run]) => run.sessionKey === key);
+  const key = normalizeSessionKeyForGateway(sessionKey || 'default');
+  return Array.from(streamRuns.entries()).filter(([, run]) => normalizeSessionKeyForGateway(run.sessionKey) === key);
 }
 function syncStreamingUiState() {
   const activeRuns = activeRunEntriesForSession(state.currentSessionKey);
@@ -78,12 +201,17 @@ function syncStreamingUiState() {
     currentRunKey = '';
     currentRunId = null;
   }
+  if (!assistantPending && !isStreaming) {
+    assistantStalled = false;
+    clearAssistantWatchdogs();
+    pendingChatRequest = null;
+  }
   renderChatHeaderStatus();
 }
 function renderChatHeaderStatus() {
   if (!chatHeaderStatus || !chatHeaderStatusText) return;
 
-  chatHeaderStatus.classList.remove('is-online', 'is-offline', 'is-connecting', 'is-typing');
+  chatHeaderStatus.classList.remove('is-online', 'is-offline', 'is-connecting', 'is-typing', 'is-waiting');
   if (!gatewayOnline) {
     chatHeaderStatus.classList.add('is-offline');
     chatHeaderStatusText.textContent = 'Offline';
@@ -91,6 +219,11 @@ function renderChatHeaderStatus() {
   }
 
   if (assistantPending || isStreaming) {
+    if (assistantStalled) {
+      chatHeaderStatus.classList.add('is-waiting');
+      chatHeaderStatusText.textContent = 'Waiting...';
+      return;
+    }
     chatHeaderStatus.classList.add('is-typing');
     chatHeaderStatusText.textContent = 'Typing...';
     return;
@@ -101,6 +234,7 @@ function renderChatHeaderStatus() {
 }
 function resetStreamingState() {
   clearTypingIndicator();
+  clearAssistantWatchdogs();
   streamRuns.forEach((run) => {
     if (run.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
   });
@@ -109,8 +243,73 @@ function resetStreamingState() {
   currentRunKey = '';
   isStreaming = false;
   assistantPending = false;
+  assistantStalled = false;
+  pendingChatRequest = null;
+  historyRecoveryInFlight = false;
   hideStopButton();
   renderChatHeaderStatus();
+}
+function countAssistantMessages(messages) {
+  return messages.filter((message) => message?.role === 'assistant').length;
+}
+function renderMergedMessages(messages) {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  container.innerHTML = '';
+  renderHistoryMessages(messages);
+  updateEmptyState();
+  scrollChatToBottom();
+}
+async function attemptHistoryRecovery() {
+  if (historyRecoveryInFlight) return;
+  if (!assistantPending || isStreaming) return;
+  if (!pendingChatRequest) return;
+  if (!gateway.connected) return;
+
+  const elapsed = Date.now() - pendingChatRequest.startedAt;
+  if (elapsed > HISTORY_RECOVERY_STALE_MS) {
+    assistantPending = false;
+    assistantStalled = false;
+    clearTypingIndicator();
+    syncStreamingUiState();
+    return;
+  }
+
+  historyRecoveryInFlight = true;
+  try {
+    await ensureChatCacheLoaded();
+    const sessionKey = pendingChatRequest.sessionKey || 'default';
+    const remoteSessionKey = normalizeSessionKeyForGateway(sessionKey);
+    const localMessages = getCachedMessages(sessionKey);
+    const remotePayload = await gateway.chatHistory(remoteSessionKey, 50);
+    const remoteMessages = Array.isArray(remotePayload) ? remotePayload : [];
+    const mergedMessages = mergeHistoryMessages(localMessages, remoteMessages);
+    const persisted = setCachedMessages(sessionKey, mergedMessages, {
+      label: sessionLabelForKey(sessionKey),
+      touchSession: sessionKey !== 'default',
+    });
+    const assistantCount = countAssistantMessages(persisted);
+    if (state.currentSessionKey === sessionKey && persisted.length !== localMessages.length) {
+      renderMergedMessages(persisted);
+    }
+    if (assistantCount > pendingChatRequest.assistantCountAtSend) {
+      assistantPending = false;
+      assistantStalled = false;
+      clearTypingIndicator();
+      syncStreamingUiState();
+    }
+  } catch {
+    // no-op
+  } finally {
+    historyRecoveryInFlight = false;
+  }
+}
+function startHistoryRecoveryLoop() {
+  clearHistoryRecoveryTimer();
+  historyRecoveryInFlight = false;
+  historyRecoveryTimer = setInterval(() => {
+    void attemptHistoryRecovery();
+  }, HISTORY_RECOVERY_POLL_MS);
 }
 function sessionLabelForKey(sessionKey) {
   if (!sessionKey || sessionKey === 'default') return 'OpenClaw';
@@ -182,6 +381,7 @@ export async function reloadChatHistory() {
   const container = document.getElementById('chat-messages');
   if (!container) return;
   const sessionKey = state.currentSessionKey || 'default';
+  const remoteSessionKey = normalizeSessionKeyForGateway(sessionKey);
   resetStreamingState();
   container.innerHTML = '';
 
@@ -192,7 +392,7 @@ export async function reloadChatHistory() {
   if (!gateway.connected) return;
 
   try {
-    const remotePayload = await gateway.chatHistory(sessionKey, 50);
+    const remotePayload = await gateway.chatHistory(remoteSessionKey, 50);
     const remoteMessages = Array.isArray(remotePayload) ? remotePayload : [];
     const mergedMessages = mergeHistoryMessages(localMessages, remoteMessages);
     const persisted = setCachedMessages(sessionKey, mergedMessages, {
@@ -285,7 +485,8 @@ function extractFrameSessionKey(frame) {
     frame?.session,
   ];
   const sessionKey = keys.find((item) => typeof item === 'string' && item.trim());
-  return typeof sessionKey === 'string' ? sessionKey.trim() : (state.currentSessionKey || 'default');
+  const rawSessionKey = typeof sessionKey === 'string' ? sessionKey.trim() : (state.currentSessionKey || 'default');
+  return normalizeSessionKeyForGateway(rawSessionKey);
 }
 function streamRunKey(frame) {
   const sessionKey = extractFrameSessionKey(frame);
@@ -318,9 +519,13 @@ function formatGatewayErrorMessage(rawMessage) {
 function handleGatewayChat(frame) {
   const eventState = typeof frame?.state === 'string' ? frame.state : '';
   const { key: runKey, sessionKey: frameSessionKey, runId: frameRunId } = streamRunKey(frame);
-  const isCurrentSessionFrame = frameSessionKey === (state.currentSessionKey || 'default');
+  const currentSessionKey = normalizeSessionKeyForGateway(state.currentSessionKey || 'default');
+  const isCurrentSessionFrame = frameSessionKey === currentSessionKey;
 
-  if (assistantPending && isCurrentSessionFrame) assistantPending = false;
+  if (isCurrentSessionFrame) {
+    touchAssistantActivity();
+    if (assistantPending) assistantPending = false;
+  }
 
   if (eventState === 'delta') {
     const delta = extractFrameText(frame);
@@ -358,31 +563,75 @@ function handleGatewayChat(frame) {
 
   if (eventState === 'final') {
     const run = streamRuns.get(runKey);
-    const finalText = extractFrameText(frame) || run?.text || '';
+    const finalMessage = normalizeAssistantMessage(frame?.message, { requireRole: false });
+    const finalText = extractFrameText(frame) || extractMessageContent(finalMessage) || run?.text || '';
     if (run?.contentDiv && isCurrentSessionFrame) {
-      if (run.contentDiv.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
-      renderBotMessage(run.contentDiv, finalText);
-      addCodeBlockCopyButtons(run.contentDiv);
-      scrollChatToBottom();
+      const runMessage = run.contentDiv.parentElement;
+      if (runMessage) runMessage.classList.remove('is-streaming');
+      if (finalText) {
+        renderBotMessage(run.contentDiv, finalText);
+        addCodeBlockCopyButtons(run.contentDiv);
+        scrollChatToBottom();
+      } else if (runMessage) {
+        runMessage.remove();
+      }
     } else if (finalText && isCurrentSessionFrame) {
       appendMessage(finalText, 'from-bot', { createdAt: Date.now() });
     }
 
     if (finalText) {
-      appendCachedMessage(frameSessionKey, {
+      const cacheSessionKey = isCurrentSessionFrame ? (state.currentSessionKey || 'default') : frameSessionKey;
+      appendCachedMessage(cacheSessionKey, {
         role: 'assistant',
         content: finalText,
         createdAt: run?.startedAt || Date.now(),
       }, {
-        label: sessionLabelForKey(frameSessionKey),
-        touchSession: frameSessionKey !== 'default',
+        label: sessionLabelForKey(cacheSessionKey),
+        touchSession: cacheSessionKey !== 'default',
       });
     }
     if (finalText && isCurrentSessionFrame) notifyIncomingBotMessage(finalText);
+    if (!finalText && isCurrentSessionFrame && shouldReloadHistoryForFinalFrame(frame)) {
+      void reloadChatHistory();
+    }
     if (run) {
       if (run.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
       streamRuns.delete(runKey);
     }
+    if (currentRunKey === runKey) currentRunKey = '';
+    syncStreamingUiState();
+    return;
+  }
+  if (eventState === 'aborted') {
+    const run = streamRuns.get(runKey);
+    const normalizedMessage = normalizeAssistantMessage(frame?.message, { requireRole: true });
+    const abortedText = extractMessageContent(normalizedMessage) || extractFrameText(frame) || run?.text || '';
+    if (run?.contentDiv && isCurrentSessionFrame) {
+      const runMessage = run.contentDiv.parentElement;
+      if (runMessage) runMessage.classList.remove('is-streaming');
+      if (abortedText) {
+        renderBotMessage(run.contentDiv, abortedText);
+        addCodeBlockCopyButtons(run.contentDiv);
+        scrollChatToBottom();
+      } else if (runMessage) {
+        runMessage.remove();
+      }
+    } else if (abortedText && isCurrentSessionFrame) {
+      appendMessage(abortedText, 'from-bot', { createdAt: Date.now() });
+    }
+    if (abortedText) {
+      const cacheSessionKey = isCurrentSessionFrame ? (state.currentSessionKey || 'default') : frameSessionKey;
+      appendCachedMessage(cacheSessionKey, {
+        role: 'assistant',
+        content: abortedText,
+        createdAt: run?.startedAt || Date.now(),
+      }, {
+        label: sessionLabelForKey(cacheSessionKey),
+        touchSession: cacheSessionKey !== 'default',
+      });
+    }
+    if (run?.contentDiv?.parentElement) run.contentDiv.parentElement.classList.remove('is-streaming');
+    streamRuns.delete(runKey);
     if (currentRunKey === runKey) currentRunKey = '';
     syncStreamingUiState();
     return;
@@ -417,10 +666,9 @@ export function sendChat() {
     appendMessage('Not connected to OpenClaw. Open Gateway Settings to configure.', 'from-bot');
     return;
   }
-  assistantPending = true;
+  beginAssistantPending();
   renderChatHeaderStatus();
-  showTypingIndicator();
-  void gateway.chatSend(state.currentSessionKey, text).catch((err) => {
+  void gateway.chatSend(normalizeSessionKeyForGateway(state.currentSessionKey), text).catch((err) => {
     resetStreamingState();
     appendMessage(`Gateway error: ${formatGatewayErrorMessage(err?.message || 'Failed to send message')}`, 'from-bot message-error');
   });
@@ -439,7 +687,8 @@ export function initChat() {
     }
   });
   gateway.on('chat', handleGatewayChat);
-  gateway.on('connected', () => {
+  gateway.on('connected', (helloPayload) => {
+    applyGatewaySessionDefaults(helloPayload);
     gatewayOnline = true;
     renderChatHeaderStatus();
     void reloadChatHistory();

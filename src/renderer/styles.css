@@ -766,6 +766,14 @@ a:hover {
   color: var(--accent);
 }
 
+.chat-header-status.is-waiting .status-dot {
+  background: var(--gray-400);
+}
+
+.chat-header-status.is-waiting #chat-status-text {
+  color: var(--gray-600);
+}
+
 #chat-messages {
   flex: 1;
   min-height: 0;

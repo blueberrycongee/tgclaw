@@ -516,7 +516,12 @@ class GatewayClient {
   }
 
   chatSend(sessionKey, message) {
-    return this.send('chat.send', { sessionKey, message, idempotencyKey: randomId() });
+    return this.send('chat.send', {
+      sessionKey,
+      message,
+      deliver: false,
+      idempotencyKey: randomId(),
+    });
   }
 
   async chatHistory(sessionKey, limit) {
