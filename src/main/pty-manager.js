@@ -9,6 +9,9 @@ let spawnHelperPrepared = false;
 const agentCommands = {
   'claude-code': { cmd: 'claude', args: [] },
   codex: { cmd: 'codex', args: [] },
+  opencode: { cmd: 'opencode', args: [] },
+  gemini: { cmd: 'gemini', args: [] },
+  kimi: { cmd: 'kimi', args: [] },
   goose: { cmd: 'goose', args: [] },
   aider: { cmd: 'aider', args: [] },
 };
