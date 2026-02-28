@@ -4,47 +4,15 @@ import hljs from 'highlight.js';
 import 'highlight.js/styles/github-dark.css';
 import { state } from './state.js';
 import { gateway } from './gateway.js';
-
-function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-function normalizeLanguage(lang) {
-  if (typeof lang !== 'string') return '';
-  return lang.trim().split(/\s+/, 1)[0];
-}
-function highlightCode(code, lang) {
-  if (lang && hljs.getLanguage(lang)) {
-    return hljs.highlight(code, { language: lang }).value;
-  }
-  return hljs.highlightAuto(code).value;
-}
-
-const marked = new Marked(
-  markedHighlight({
-    emptyLangClass: 'hljs',
-    langPrefix: 'hljs language-',
-    highlight(code, lang) {
-      return highlightCode(code, normalizeLanguage(lang));
-    },
-  }),
-);
-marked.use({
-  renderer: {
-    code({ text, lang }) {
-      const normalizedLang = normalizeLanguage(lang);
-      const languageClass = normalizedLang ? `hljs language-${escapeHtml(normalizedLang)}` : 'hljs';
-      const languageLabel = escapeHtml(normalizedLang || 'plaintext');
-      const highlightedCode = highlightCode(text, normalizedLang);
-      return `<div class="code-block-wrapper"><div class="code-block-header"><span class="code-lang">${languageLabel}</span><button class="code-copy-btn" type="button" title="Copy">📋</button></div><pre><code class="${languageClass}">${highlightedCode}</code></pre></div>`;
-    },
+const marked = new Marked(markedHighlight({
+  emptyLangClass: 'hljs',
+  langPrefix: 'hljs language-',
+  highlight(code, lang) {
+    const normalizedLang = typeof lang === 'string' ? lang.trim().split(/\s+/, 1)[0] : '';
+    if (normalizedLang && hljs.getLanguage(normalizedLang)) return hljs.highlight(code, { language: normalizedLang }).value;
+    return hljs.highlightAuto(code).value;
   },
-});
-
+}));
 let updateOpenClawBadgeRef = () => {};
 let chatInput = null;
 let currentStreamDiv = null;
@@ -88,6 +56,7 @@ function animateMessageEntry(element, enabled = true) {
 export function configureChat({ updateOpenClawBadge }) {
   updateOpenClawBadgeRef = updateOpenClawBadge;
 }
+function activeChatItem() { return state.currentItem === 'openclaw' || state.currentItem.startsWith('session:'); }
 function resizeChatInput() {
   if (!chatInput) return;
   chatInput.style.height = 'auto';
@@ -96,15 +65,14 @@ function resizeChatInput() {
   chatInput.style.overflowY = chatInput.scrollHeight > 120 ? 'auto' : 'hidden';
 }
 function markBotUnread() {
-  if (state.currentItem !== 'openclaw') {
-    state.unreadCount += 1;
-    updateOpenClawBadgeRef();
-  }
+  if (activeChatItem()) return;
+  state.unreadCount += 1;
+  updateOpenClawBadgeRef();
 }
 function notifyIncomingBotMessage(text) {
   if (document.hasFocus()) return;
   const body = String(text || '')
-    .replace(/```[\s\S]*?```|`[^`]*`|!\[[^\]]*]\([^)]+\)/g, ' ')
+    .replace(/```[\s\S]*?```|`[^`]*`|!\[[^\]]*\]\([^)]+\)/g, ' ')
     .replace(/\[([^\]]+)\]\([^)]+\)|[#>*_~]/g, '$1')
     .replace(/\s+/g, ' ')
     .trim()
@@ -116,65 +84,15 @@ function renderBotMessage(div, text) {
   if (marked?.parse) div.innerHTML = marked.parse(text);
   else div.textContent = text;
 }
-async function copyTextToClipboard(text) {
-  if (!text) return false;
-  if (navigator.clipboard?.writeText) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (error) {
-      void error;
-    }
-  }
-  const textarea = document.createElement('textarea');
-  textarea.value = text;
-  textarea.setAttribute('readonly', '');
-  textarea.style.position = 'fixed';
-  textarea.style.opacity = '0';
-  textarea.style.pointerEvents = 'none';
-  document.body.appendChild(textarea);
-  textarea.select();
-  const copied = document.execCommand('copy');
-  textarea.remove();
-  return copied;
-}
-function showCopySuccess(button) {
-  button.textContent = '✅';
-  button.disabled = true;
-  window.setTimeout(() => {
-    button.textContent = '📋';
-    button.disabled = false;
-  }, 1200);
-}
-function handleChatMessageClick(event) {
-  const target = event.target;
-  if (!(target instanceof Element)) return;
-  const copyButton = target.closest('.code-copy-btn');
-  if (!(copyButton instanceof HTMLButtonElement)) return;
-  const wrapper = copyButton.closest('.code-block-wrapper');
-  const codeElement = wrapper?.querySelector('pre code');
-  const codeText = codeElement?.textContent || '';
-  if (!codeText) return;
-  void copyTextToClipboard(codeText).then((copied) => {
-    if (copied) showCopySuccess(copyButton);
-  });
-}
 function scrollChatToBottom() {
   const container = document.getElementById('chat-messages');
-  if (!container) return;
-  container.scrollTop = container.scrollHeight;
+  if (container) container.scrollTop = container.scrollHeight;
 }
-function showStopButton() {
-  const btn = document.getElementById('chat-stop');
-  if (btn) btn.style.display = 'inline-flex';
-}
-function hideStopButton() {
-  const btn = document.getElementById('chat-stop');
-  if (btn) btn.style.display = 'none';
-}
+function showStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'inline-flex'; }
+function hideStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'none'; }
 function abortChat() {
   if (!isStreaming || !currentRunId) return;
-  void gateway.chatAbort('default', currentRunId).catch(() => {});
+  void gateway.chatAbort(state.currentSessionKey, currentRunId).catch(() => {});
 }
 function renderChatHeaderStatus() {
   if (!chatHeaderStatus || !chatHeaderStatusText) return;
@@ -205,15 +123,15 @@ function resetStreamingState() {
   hideStopButton();
   renderChatHeaderStatus();
 }
-
-async function loadChatHistory() {
+export async function reloadChatHistory() {
+  const container = document.getElementById('chat-messages');
+  if (!container) return;
+  resetStreamingState();
+  container.innerHTML = '';
   if (!gateway.connected) return;
   try {
-    const messages = await gateway.chatHistory('default', 50);
+    const messages = await gateway.chatHistory(state.currentSessionKey, 50);
     if (!Array.isArray(messages)) return;
-    const container = document.getElementById('chat-messages');
-    if (!container) return;
-    container.innerHTML = '';
     messages.forEach((message) => {
       if (!message || typeof message.content !== 'string') return;
       if (message.role === 'user') {
@@ -222,8 +140,8 @@ async function loadChatHistory() {
       }
       if (message.role === 'assistant') appendMessage(message.content, 'from-bot', { animate: false });
     });
-  } catch (error) {
-    void error;
+  } catch {
+    // no-op
   }
 }
 export function appendMessage(text, cls, options = {}) {
@@ -360,10 +278,9 @@ export function sendChat() {
     appendMessage('Not connected to OpenClaw. Open Gateway Settings to configure.', 'from-bot');
     return;
   }
-
   assistantPending = true;
   renderChatHeaderStatus();
-  void gateway.chatSend('default', text).catch((err) => {
+  void gateway.chatSend(state.currentSessionKey, text).catch((err) => {
     resetStreamingState();
     appendMessage(`Gateway error: ${formatGatewayErrorMessage(err?.message || 'Failed to send message')}`, 'from-bot');
   });
@@ -372,10 +289,8 @@ export function initChat() {
   chatInput = document.getElementById('chat-input');
   chatHeaderStatus = document.querySelector('.chat-header-status');
   chatHeaderStatusText = document.getElementById('chat-status-text');
-
   document.getElementById('chat-send')?.addEventListener('click', sendChat);
   document.getElementById('chat-stop')?.addEventListener('click', abortChat);
-  document.getElementById('chat-messages')?.addEventListener('click', handleChatMessageClick);
   chatInput.addEventListener('input', resizeChatInput);
   chatInput.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -383,12 +298,11 @@ export function initChat() {
       sendChat();
     }
   });
-
   gateway.on('chat', handleGatewayChat);
   gateway.on('connected', () => {
     gatewayOnline = true;
     renderChatHeaderStatus();
-    void loadChatHistory();
+    void reloadChatHistory();
   });
   gateway.on('disconnected', () => {
     gatewayOnline = false;
