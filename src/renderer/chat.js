@@ -10,7 +10,7 @@ let currentRunId = null;
 let isStreaming = false;
 let assistantPending = false;
 let gatewayOnline = false;
-let lastRenderTime = 0;
+let streamRenderQueued = false;
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
 let typingIndicatorDiv = null;
@@ -79,12 +79,13 @@ function renderChatHeaderStatus() {
 }
 function resetStreamingState() {
   clearTypingIndicator();
+  if (currentStreamDiv?.parentElement) currentStreamDiv.parentElement.classList.remove('is-streaming');
   currentStreamDiv = null;
   currentStreamText = '';
   currentRunId = null;
   isStreaming = false;
   assistantPending = false;
-  lastRenderTime = 0;
+  streamRenderQueued = false;
   hideStopButton();
   renderChatHeaderStatus();
 }
@@ -115,6 +116,16 @@ export async function reloadChatHistory() {
     // no-op
   }
   updateEmptyState();
+}
+function queueStreamRender() {
+  if (!currentStreamDiv || streamRenderQueued) return;
+  streamRenderQueued = true;
+  requestAnimationFrame(() => {
+    streamRenderQueued = false;
+    if (!currentStreamDiv) return;
+    currentStreamDiv.textContent = currentStreamText;
+    scrollChatToBottom();
+  });
 }
 function extractMessageContent(message) {
   if (typeof message === 'string') return message;
@@ -185,22 +196,17 @@ function handleGatewayChat(frame) {
     renderChatHeaderStatus();
     if (!currentStreamDiv) {
       currentStreamDiv = createStreamMessage();
+      if (currentStreamDiv?.parentElement) currentStreamDiv.parentElement.classList.add('is-streaming');
       currentStreamText = '';
-      lastRenderTime = 0;
     }
     currentStreamText = mergeStreamText(currentStreamText, frame);
-    if (Date.now() - lastRenderTime > 300) {
-      renderBotMessage(currentStreamDiv, currentStreamText);
-      lastRenderTime = Date.now();
-    } else {
-      currentStreamDiv.textContent = currentStreamText;
-    }
-    scrollChatToBottom();
+    queueStreamRender();
     return;
   }
   if (eventState === 'final') {
     const finalText = extractFrameText(frame) || currentStreamText;
     if (currentStreamDiv) {
+      if (currentStreamDiv.parentElement) currentStreamDiv.parentElement.classList.remove('is-streaming');
       renderBotMessage(currentStreamDiv, finalText);
       addCodeBlockCopyButtons(currentStreamDiv);
       scrollChatToBottom();
