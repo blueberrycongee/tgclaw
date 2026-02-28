@@ -2,26 +2,14 @@ import { state } from './state.js';
 import { agentLabel, escapeHtml } from './utils.js';
 import { renderAgentIcon, renderIcon } from './icons.js';
 import { closeTerminalSearch, createTerminal, hideAllTerminals, showTerminal } from './terminal.js';
-import {
-  configureTabsDragDrop,
-  onTabDragEnd,
-  onTabDragOver,
-  onTabDragStart,
-  onTabDrop,
-} from './tabs-drag-drop.js';
+import { configureTabDragDrop, onTabDragEnd, onTabDragOver, onTabDragStart, onTabDrop } from './tabs-drag-drop.js';
+import { hideAgentPicker, initAgentPicker as initAgentPickerBase, showAgentPicker } from './tabs-hover-menu.js';
 const deps = { renderProjects: () => {}, updateWindowTitle: () => {} };
-let agentPickerSelectionLocked = false;
-let addTabHoverHideTimer = null;
-let addTabDefaultAgent = 'shell';
-const ADD_TAB_DEFAULT_KEY = 'tgclaw:add-tab-default-agent';
 const terminalActivityDebounce = new Map();
-export function configureTabs(nextDeps) { Object.assign(deps, nextDeps); }
-configureTabsDragDrop({
-  isTabRenaming: (projectId, tabId) => isTabRenaming(projectId, tabId),
-  renderTabs: (projectId) => renderTabs(projectId),
-});
-export { onTabDragStart, onTabDragOver, onTabDrop, onTabDragEnd };
-
+export function configureTabs(nextDeps) {
+  Object.assign(deps, nextDeps);
+  configureTabDragDrop({ isTabRenaming, renderTabs });
+}
 function scheduleProjectListRefresh(projectId) {
   if (!projectId) return;
   const existed = terminalActivityDebounce.get(projectId);
@@ -31,34 +19,11 @@ function scheduleProjectListRefresh(projectId) {
     deps.renderProjects();
   }, 500));
 }
-
-function onProjectOutput(projectId) {
-  scheduleProjectListRefresh(projectId);
-}
-function normalizeCommand(command) {
-  if (typeof command !== 'string') return '';
-  return command.trim();
-}
-
-function normalizeCommandArgs(value) {
-  if (!Array.isArray(value)) return [];
-  return value.map((item) => {
-    if (typeof item === 'string') return item;
-    if (item == null) return '';
-    return String(item);
-  }).filter(Boolean);
-}
-
-function normalizeCommandType(type, command) {
-  const normalizedCommand = normalizeCommand(command);
-  return normalizedCommand || type;
-}
-
-function normalizeTerminalSessionId(value) {
-  if (typeof value !== 'string') return '';
-  return value.trim();
-}
-
+function onProjectOutput(projectId) { scheduleProjectListRefresh(projectId); }
+function normalizeCommand(command) { return typeof command === 'string' ? command.trim() : ''; }
+function normalizeCommandArgs(value) { return Array.isArray(value) ? value.map((item) => (typeof item === 'string' ? item : (item == null ? '' : String(item)))).filter(Boolean) : []; }
+function normalizeCommandType(type, command) { return normalizeCommand(command) || type; }
+function normalizeTerminalSessionId(value) { return typeof value === 'string' ? value.trim() : ''; }
 function findTabBySessionId(terminalSessionId) {
   const sessionId = normalizeTerminalSessionId(terminalSessionId);
   if (!sessionId) return null;
@@ -68,10 +33,7 @@ function findTabBySessionId(terminalSessionId) {
   }
   return null;
 }
-
-function shouldSelectProject(projectId) {
-  return typeof projectId === 'string' && projectId.trim();
-}
+function shouldSelectProject(projectId) { return typeof projectId === 'string' && projectId.trim(); }
 export function getTabDisplayName(tab) { return tab.customName || agentLabel(tab.type); }
 function isTabRenaming(projectId, tabId) { return state.tabRenameState.projectId === projectId && state.tabRenameState.tabId === tabId; }
 export function onTabTitleDoubleClick(event, projectId, tabId) {
@@ -126,9 +88,7 @@ export function renderTabs(projectId) {
     event.stopPropagation();
     closeTab(projectId, button.dataset.tabId);
   }));
-  tabList.querySelectorAll('.tab-title').forEach((titleEl) => titleEl.addEventListener('dblclick', (event) => {
-    onTabTitleDoubleClick(event, projectId, titleEl.dataset.tabId);
-  }));
+  tabList.querySelectorAll('.tab-title').forEach((titleEl) => titleEl.addEventListener('dblclick', (event) => onTabTitleDoubleClick(event, projectId, titleEl.dataset.tabId)));
   tabList.querySelectorAll('.tab-rename-input').forEach((input) => {
     const tabId = input.dataset.tabId;
     input.addEventListener('click', (event) => event.stopPropagation());
@@ -138,7 +98,10 @@ export function renderTabs(projectId) {
   });
   if (state.tabRenameState.projectId === projectId && state.tabRenameState.tabId) {
     const input = tabList.querySelector(`.tab-rename-input[data-tab-id="${state.tabRenameState.tabId}"]`);
-    if (input) { input.focus(); input.select(); }
+    if (input) {
+      input.focus();
+      input.select();
+    }
   }
   hideAllTerminals();
   if (active) showTerminal(projectTabs.find((tab) => tab.id === active));
@@ -166,19 +129,12 @@ export async function addAgentTab(type, options = {}) {
   const targetProjectId = shouldSelectProject(options.projectId) ? options.projectId : state.currentItem;
   const project = state.projects.find((item) => item.id === targetProjectId);
   if (!project) return;
-
-  const terminalRequest = options.terminalRequest && typeof options.terminalRequest === 'object'
-    ? options.terminalRequest
-    : null;
-  const captureExecution = options.captureExecution && typeof options.captureExecution === 'object'
-    ? options.captureExecution
-    : null;
+  const terminalRequest = options.terminalRequest && typeof options.terminalRequest === 'object' ? options.terminalRequest : null;
+  const captureExecution = options.captureExecution && typeof options.captureExecution === 'object' ? options.captureExecution : null;
   const requestCommand = normalizeCommand(terminalRequest?.command);
   const requestArgs = normalizeCommandArgs(terminalRequest?.args);
   const command = normalizeCommand(options.command) || requestCommand;
-  const commandArgs = normalizeCommandArgs(options.commandArgs).length > 0
-    ? normalizeCommandArgs(options.commandArgs)
-    : requestArgs;
+  const commandArgs = normalizeCommandArgs(options.commandArgs).length > 0 ? normalizeCommandArgs(options.commandArgs) : requestArgs;
   const requestedSessionId = normalizeTerminalSessionId(options.terminalSessionId || terminalRequest?.terminalSessionId);
   const existing = findTabBySessionId(requestedSessionId);
   if (existing) {
@@ -189,10 +145,8 @@ export async function addAgentTab(type, options = {}) {
     deps.updateWindowTitle();
     return existing.tab;
   }
-
   const isActiveProject = state.currentItem === project.id;
   const tabType = normalizeCommandType(type, command);
-
   const tabId = `tab-${Date.now()}`;
   if (!state.tabs[project.id]) state.tabs[project.id] = [];
   const terminal = await createTerminal({
@@ -216,30 +170,16 @@ export async function addAgentTab(type, options = {}) {
     },
     onRestart: () => {
       closeTab(project.id, tabId);
-      addAgentTab(type, {
-        command,
-        commandArgs,
-        projectId: project.id,
-      });
+      addAgentTab(type, { command, commandArgs, projectId: project.id });
     },
   });
-  const tabRecord = {
-    id: tabId,
-    type: tabType,
-    customName: '',
-    terminalSessionId: normalizeTerminalSessionId(terminal?.terminalSessionId || requestedSessionId),
-    ...terminal,
-  };
+  const tabRecord = { id: tabId, type: tabType, customName: '', terminalSessionId: normalizeTerminalSessionId(terminal?.terminalSessionId || requestedSessionId), ...terminal };
   state.tabs[project.id].push(tabRecord);
   state.activeTab[project.id] = tabId;
-  if (isActiveProject) {
-    renderTabs(project.id);
-  }
+  if (isActiveProject) renderTabs(project.id);
   deps.renderProjects();
   deps.updateWindowTitle();
-  if (isActiveProject) {
-    setTimeout(() => terminal.fitAddon.fit(), 150);
-  }
+  if (isActiveProject) setTimeout(() => terminal.fitAddon.fit(), 150);
   return tabRecord;
 }
 export function closeTab(projectId, tabId) {
@@ -252,237 +192,9 @@ export function closeTab(projectId, tabId) {
   tab.cleanup();
   projectTabs.splice(index, 1);
   if (state.activeTab[projectId] === tabId) state.activeTab[projectId] = projectTabs.length > 0 ? projectTabs[projectTabs.length - 1].id : null;
-
   if (state.currentItem === projectId) renderTabs(projectId);
   deps.renderProjects();
   deps.updateWindowTitle();
 }
-
-function clearAddTabHoverHideTimer() {
-  if (addTabHoverHideTimer) clearTimeout(addTabHoverHideTimer);
-  addTabHoverHideTimer = null;
-}
-
-function getAddTabHoverMenu() {
-  return document.getElementById('add-tab-hover-menu');
-}
-
-function getAddTabDefaultAnchor() {
-  return document.getElementById('tab-add-default-anchor');
-}
-
-function getAddTabDefaultSubmenu() {
-  return document.getElementById('add-tab-default-submenu');
-}
-
-function positionAddTabHoverMenu() {
-  const addTabButton = document.getElementById('add-tab');
-  const menu = getAddTabHoverMenu();
-  if (!addTabButton || !menu) return;
-
-  const rect = addTabButton.getBoundingClientRect();
-  const menuWidth = menu.offsetWidth || 190;
-  const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuWidth - 8));
-  menu.style.left = `${Math.round(left)}px`;
-  menu.style.top = `${Math.round(rect.bottom + 6)}px`;
-}
-
-function positionAddTabDefaultSubmenu() {
-  const anchor = getAddTabDefaultAnchor();
-  const submenu = getAddTabDefaultSubmenu();
-  if (!anchor || !submenu) return;
-
-  const rect = anchor.getBoundingClientRect();
-  const submenuWidth = submenu.offsetWidth || 190;
-  const submenuHeight = submenu.offsetHeight || 280;
-  let left = rect.right + 4;
-  if (left + submenuWidth > window.innerWidth - 8) left = rect.left - submenuWidth - 4;
-  left = Math.max(8, left);
-
-  let top = rect.top;
-  if (top + submenuHeight > window.innerHeight - 8) top = window.innerHeight - submenuHeight - 8;
-  top = Math.max(8, top);
-
-  submenu.style.left = `${Math.round(left)}px`;
-  submenu.style.top = `${Math.round(top)}px`;
-}
-
-function showAddTabDefaultSubmenu() {
-  clearAddTabHoverHideTimer();
-  const menu = getAddTabHoverMenu();
-  const anchor = getAddTabDefaultAnchor();
-  const submenu = getAddTabDefaultSubmenu();
-  if (!menu?.classList.contains('show') || !anchor || !submenu) return;
-  submenu.classList.add('show');
-  anchor.setAttribute('aria-expanded', 'true');
-  positionAddTabDefaultSubmenu();
-}
-
-function hideAddTabDefaultSubmenu() {
-  const anchor = getAddTabDefaultAnchor();
-  const submenu = getAddTabDefaultSubmenu();
-  if (anchor) anchor.setAttribute('aria-expanded', 'false');
-  if (submenu) submenu.classList.remove('show');
-}
-
-function showAddTabHoverMenu() {
-  clearAddTabHoverHideTimer();
-  const menu = getAddTabHoverMenu();
-  if (!menu) return;
-  hideAddTabDefaultSubmenu();
-  menu.classList.add('show');
-  positionAddTabHoverMenu();
-  updateAddTabDefaultUi();
-}
-
-function hideAddTabHoverMenu() {
-  clearAddTabHoverHideTimer();
-  hideAddTabDefaultSubmenu();
-  const menu = getAddTabHoverMenu();
-  if (!menu) return;
-  menu.classList.remove('show');
-}
-
-function scheduleHideAddTabHoverMenu() {
-  clearAddTabHoverHideTimer();
-  addTabHoverHideTimer = setTimeout(() => hideAddTabHoverMenu(), 180);
-}
-
-function getAddTabOptionTypes() {
-  const fromSubmenu = Array.from(document.querySelectorAll('#add-tab-default-submenu .tab-add-default-option[data-agent-type]'))
-    .map((option) => option.dataset.agentType)
-    .filter(Boolean);
-  if (fromSubmenu.length > 0) return fromSubmenu;
-  return Array.from(document.querySelectorAll('#add-tab-hover-menu .tab-add-option[data-agent-type]'))
-    .map((option) => option.dataset.agentType)
-    .filter(Boolean);
-}
-
-function resolveDefaultAgent() {
-  const optionTypes = getAddTabOptionTypes();
-  if (optionTypes.length === 0) return 'shell';
-  const saved = localStorage.getItem(ADD_TAB_DEFAULT_KEY);
-  if (saved && optionTypes.includes(saved)) return saved;
-  if (optionTypes.includes('shell')) return 'shell';
-  return optionTypes[0];
-}
-
-function updateAddTabDefaultUi() {
-  const label = agentLabel(addTabDefaultAgent);
-  const addTabButton = document.getElementById('add-tab');
-  const badge = document.getElementById('add-tab-default-badge');
-  const defaultValue = document.getElementById('tab-add-default-value');
-  if (addTabButton) addTabButton.title = `New Tab (${label})`;
-  if (badge) badge.textContent = `Default: ${label}`;
-  if (defaultValue) defaultValue.textContent = label;
-
-  document.querySelectorAll('#add-tab-default-submenu .tab-add-default-option').forEach((option) => {
-    const isDefault = option.dataset.agentType === addTabDefaultAgent;
-    option.classList.toggle('is-default', isDefault);
-  });
-}
-
-function setDefaultAgent(type) {
-  if (!type || typeof type !== 'string') return;
-  addTabDefaultAgent = type;
-  localStorage.setItem(ADD_TAB_DEFAULT_KEY, type);
-  updateAddTabDefaultUi();
-}
-
-export function showAgentPicker() {
-  agentPickerSelectionLocked = false;
-  hideAddTabHoverMenu();
-  document.getElementById('agent-picker')?.classList.add('show');
-}
-export function hideAgentPicker() {
-  agentPickerSelectionLocked = false;
-  document.getElementById('agent-picker')?.classList.remove('show');
-  hideAddTabHoverMenu();
-}
-export function initAgentPicker() {
-  const addTabButton = document.getElementById('add-tab');
-  const addTabHoverMenu = getAddTabHoverMenu();
-  const addTabDefaultAnchor = getAddTabDefaultAnchor();
-  const addTabDefaultSubmenu = getAddTabDefaultSubmenu();
-  if (addTabButton && addTabHoverMenu && addTabDefaultAnchor && addTabDefaultSubmenu) {
-    addTabDefaultAgent = resolveDefaultAgent();
-    updateAddTabDefaultUi();
-
-    addTabButton.addEventListener('mouseenter', () => showAddTabHoverMenu());
-    addTabButton.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
-    addTabButton.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      hideAddTabHoverMenu();
-      void addAgentTab(addTabDefaultAgent);
-    });
-
-    addTabHoverMenu.addEventListener('mouseenter', () => clearAddTabHoverHideTimer());
-    addTabHoverMenu.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
-    addTabHoverMenu.querySelectorAll('.tab-add-option').forEach((option) => option.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const type = option.dataset.agentType;
-      if (!type || agentPickerSelectionLocked) return;
-      agentPickerSelectionLocked = true;
-      option.classList.add('pick-feedback');
-      setTimeout(() => {
-        option.classList.remove('pick-feedback');
-        hideAddTabHoverMenu();
-        void addAgentTab(type);
-        agentPickerSelectionLocked = false;
-      }, 120);
-    }));
-
-    addTabDefaultAnchor.addEventListener('mouseenter', () => showAddTabDefaultSubmenu());
-    addTabDefaultAnchor.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      showAddTabDefaultSubmenu();
-    });
-    addTabDefaultSubmenu.addEventListener('mouseenter', () => clearAddTabHoverHideTimer());
-    addTabDefaultSubmenu.addEventListener('mouseleave', () => scheduleHideAddTabHoverMenu());
-    addTabDefaultSubmenu.querySelectorAll('.tab-add-default-option').forEach((option) => option.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const type = option.dataset.agentType;
-      if (!type || agentPickerSelectionLocked) return;
-      agentPickerSelectionLocked = true;
-      option.classList.add('pick-feedback');
-      setTimeout(() => {
-        option.classList.remove('pick-feedback');
-        setDefaultAgent(type);
-        hideAddTabHoverMenu();
-        agentPickerSelectionLocked = false;
-      }, 120);
-    }));
-
-    document.addEventListener('click', (event) => {
-      if (
-        addTabButton.contains(event.target)
-        || addTabHoverMenu.contains(event.target)
-        || addTabDefaultSubmenu.contains(event.target)
-      ) return;
-      hideAddTabHoverMenu();
-    });
-
-    window.addEventListener('resize', () => {
-      if (addTabHoverMenu.classList.contains('show')) positionAddTabHoverMenu();
-      if (addTabDefaultSubmenu.classList.contains('show')) positionAddTabDefaultSubmenu();
-    });
-  }
-
-  document.getElementById('agent-picker')?.addEventListener('click', (event) => {
-    if (event.target.id === 'agent-picker') hideAgentPicker();
-  });
-  document.querySelectorAll('#agent-picker .agent-option').forEach((option) => option.addEventListener('click', () => {
-    const type = option.dataset.agentType;
-    if (!type || agentPickerSelectionLocked) return;
-    agentPickerSelectionLocked = true;
-    option.classList.add('pick-feedback');
-    setTimeout(() => {
-      option.classList.remove('pick-feedback');
-      addAgentTab(type);
-    }, 180);
-  }));
-}
+export function initAgentPicker() { initAgentPickerBase({ addAgentTab }); }
+export { hideAgentPicker, showAgentPicker };
