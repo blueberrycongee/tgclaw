@@ -1126,6 +1126,18 @@ a:hover {
   margin-right: auto;
   border-bottom-left-radius: 4px;
 }
+.message-time {
+  display: block;
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 4px;
+  text-align: right;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.message:hover .message-time {
+  opacity: 1;
+}
 .message.from-bot > :first-child { margin-top: 0; }
 .message.from-bot > :last-child { margin-bottom: 0; }
 .message.from-bot a { color: var(--accent); }
