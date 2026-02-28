@@ -1,7 +1,12 @@
 const DEVICE_IDENTITY_STORAGE_KEY = 'tgclaw.gateway.deviceIdentity.v1';
 
-let cachedDeviceIdentity = null;
-let cachedPrivateKey = null;
+const identityCache = new Map();
+const privateKeyCache = new Map();
+
+function getStorageKey(role) {
+  if (role === 'node') return DEVICE_IDENTITY_STORAGE_KEY + '.node';
+  return DEVICE_IDENTITY_STORAGE_KEY;
+}
 
 function randomId() {
   if (typeof crypto?.randomUUID === 'function') return crypto.randomUUID();
@@ -49,9 +54,9 @@ async function sha256Hex(bytes) {
   return bytesToHex(new Uint8Array(hashBuffer));
 }
 
-function readStoredDeviceIdentity() {
+function readStoredDeviceIdentity(role) {
   try {
-    const raw = localStorage.getItem(DEVICE_IDENTITY_STORAGE_KEY);
+    const raw = localStorage.getItem(getStorageKey(role));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.version !== 1) return null;
@@ -72,9 +77,9 @@ function readStoredDeviceIdentity() {
   }
 }
 
-function storeDeviceIdentity(identity) {
+function storeDeviceIdentity(identity, role) {
   try {
-    localStorage.setItem(DEVICE_IDENTITY_STORAGE_KEY, JSON.stringify({
+    localStorage.setItem(getStorageKey(role), JSON.stringify({
       version: 1,
       deviceId: identity.deviceId,
       publicKeyRaw: identity.publicKeyRaw,
@@ -86,7 +91,7 @@ function storeDeviceIdentity(identity) {
   }
 }
 
-async function createDeviceIdentity() {
+async function createDeviceIdentity(role) {
   const pair = await crypto.subtle.generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
   const publicKeyRaw = new Uint8Array(await crypto.subtle.exportKey('raw', pair.publicKey));
   const privateKeyPkcs8 = new Uint8Array(await crypto.subtle.exportKey('pkcs8', pair.privateKey));
@@ -96,27 +101,30 @@ async function createDeviceIdentity() {
     publicKeyRaw: base64UrlEncode(publicKeyRaw),
     privateKeyPkcs8: base64UrlEncode(privateKeyPkcs8),
   };
-  storeDeviceIdentity(identity);
+  storeDeviceIdentity(identity, role);
   return identity;
 }
 
-async function loadOrCreateDeviceIdentity() {
-  if (cachedDeviceIdentity) return cachedDeviceIdentity;
-  const stored = readStoredDeviceIdentity();
+async function loadOrCreateDeviceIdentity(role = 'operator') {
+  const cacheKey = role || 'operator';
+  if (identityCache.has(cacheKey)) return identityCache.get(cacheKey);
+  const stored = readStoredDeviceIdentity(role);
   if (stored) {
-    cachedDeviceIdentity = stored;
+    identityCache.set(cacheKey, stored);
     return stored;
   }
-  const created = await createDeviceIdentity();
-  cachedDeviceIdentity = created;
+  const created = await createDeviceIdentity(role);
+  identityCache.set(cacheKey, created);
   return created;
 }
 
-async function getDevicePrivateKey(identity) {
-  if (cachedPrivateKey) return cachedPrivateKey;
+async function getDevicePrivateKey(identity, role = 'operator') {
+  const cacheKey = identity.deviceId;
+  if (privateKeyCache.has(cacheKey)) return privateKeyCache.get(cacheKey);
   const privateBytes = base64UrlDecode(identity.privateKeyPkcs8);
-  cachedPrivateKey = await crypto.subtle.importKey('pkcs8', privateBytes, { name: 'Ed25519' }, false, ['sign']);
-  return cachedPrivateKey;
+  const key = await crypto.subtle.importKey('pkcs8', privateBytes, { name: 'Ed25519' }, false, ['sign']);
+  privateKeyCache.set(cacheKey, key);
+  return key;
 }
 
 function buildDeviceAuthPayloadV3({ deviceId, clientId, clientMode, role, scopes, signedAtMs, token, nonce, platform, deviceFamily }) {
@@ -136,8 +144,8 @@ function buildDeviceAuthPayloadV3({ deviceId, clientId, clientMode, role, scopes
 }
 
 async function buildDeviceAuthSignature({ nonce, token, role, scopes, clientId, clientMode, platform, deviceFamily }) {
-  const identity = await loadOrCreateDeviceIdentity();
-  const privateKey = await getDevicePrivateKey(identity);
+  const identity = await loadOrCreateDeviceIdentity(role);
+  const privateKey = await getDevicePrivateKey(identity, role);
   const signedAt = Date.now();
   const payload = buildDeviceAuthPayloadV3({
     deviceId: identity.deviceId,
