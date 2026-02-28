@@ -33,6 +33,7 @@ export function selectItem(id) {
   const shouldReloadHistory = typeof nextSessionKey === 'string' && state.currentSessionKey !== nextSessionKey;
   if (typeof nextSessionKey === 'string') {
     state.currentSessionKey = nextSessionKey;
+    localStorage.setItem('tgclaw:lastSessionKey', nextSessionKey);
     deps.updateChatHeader();
   }
 

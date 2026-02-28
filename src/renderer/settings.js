@@ -1,6 +1,6 @@
 import { gateway } from './gateway.js';
 import { state } from './state.js';
-import { renderSessions } from './sidebar.js';
+import { renderSessions, selectItem } from './sidebar.js';
 
 const DEFAULT_GATEWAY_URL = 'ws://localhost:18789';
 
@@ -58,6 +58,14 @@ async function syncSessionsFromGateway() {
     state.sessions = [];
   }
   renderSessions();
+  const lastSessionKey = localStorage.getItem('tgclaw:lastSessionKey');
+  if (
+    lastSessionKey
+    && lastSessionKey !== 'default'
+    && state.sessions.some((session) => session?.sessionKey === lastSessionKey)
+  ) {
+    selectItem(`session:${lastSessionKey}`);
+  }
 }
 
 async function loadSavedConfig() {
