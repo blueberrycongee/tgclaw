@@ -1,4 +1,6 @@
 import { gateway } from './gateway.js';
+import { state } from './state.js';
+import { renderSessions } from './sidebar.js';
 
 const DEFAULT_GATEWAY_URL = 'ws://localhost:18789';
 
@@ -24,8 +26,15 @@ export async function initSettings() {
     if (event.target === settingsPanel) hideSettings();
   });
 
-  gateway.on('connected', () => updateConnectionStatus('connected'));
-  gateway.on('disconnected', () => updateConnectionStatus('disconnected'));
+  gateway.on('connected', () => {
+    updateConnectionStatus('connected');
+    void syncSessionsFromGateway();
+  });
+  gateway.on('disconnected', () => {
+    updateConnectionStatus('disconnected');
+    state.sessions = [];
+    renderSessions();
+  });
   gateway.on('error', () => updateConnectionStatus('disconnected'));
 
   updateConnectionStatus(gateway.connected ? 'connected' : 'disconnected');
@@ -34,10 +43,21 @@ export async function initSettings() {
     updateConnectionStatus('connecting');
     try {
       await gateway.connect(savedConfig.url, savedConfig.token);
+      await syncSessionsFromGateway();
     } catch {
       updateConnectionStatus('disconnected');
     }
   }
+}
+
+async function syncSessionsFromGateway() {
+  try {
+    const sessions = await gateway.sessionsList();
+    state.sessions = Array.isArray(sessions) ? sessions : [];
+  } catch {
+    state.sessions = [];
+  }
+  renderSessions();
 }
 
 async function loadSavedConfig() {
