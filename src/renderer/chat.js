@@ -1,8 +1,8 @@
 import { renderBotMessage } from './markdown.js';
+import { animateMessageEntry, appendMessage, configureChatMessages, createStreamMessage, notifyIncomingBotMessage, scrollChatToBottom, updateEmptyState } from './chat-messages.js';
 import { state } from './state.js';
 import { gateway } from './gateway.js';
 import { renderSessions } from './sidebar.js';
-let updateOpenClawBadgeRef = () => {};
 let chatInput = null;
 let currentStreamDiv = null;
 let currentStreamText = '';
@@ -14,54 +14,18 @@ let lastRenderTime = 0;
 let chatHeaderStatus = null;
 let chatHeaderStatusText = null;
 let typingIndicatorDiv = null;
-const MESSAGE_ENTER_DURATION_MS = 180;
-
-function animateMessageEntry(element, enabled = true) {
-  if (!enabled || !element) return;
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-
-  element.classList.add('message-enter');
-
-  // Force a frame boundary so the browser can transition from the initial state.
-  requestAnimationFrame(() => {
-    element.classList.add('message-enter-active');
-  });
-
-  let cleaned = false;
-  const cleanup = () => {
-    if (cleaned) return;
-    cleaned = true;
-    element.classList.remove('message-enter', 'message-enter-active');
-    element.removeEventListener('transitionend', onTransitionEnd);
-  };
-  const onTransitionEnd = (event) => {
-    if (event.target !== element) return;
-    cleanup();
-  };
-
-  element.addEventListener('transitionend', onTransitionEnd);
-  setTimeout(cleanup, MESSAGE_ENTER_DURATION_MS + 80);
-}
-
-export function configureChat({ updateOpenClawBadge }) {
-  updateOpenClawBadgeRef = updateOpenClawBadge;
-}
+export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
 export function updateChatHeader() {
   const title = document.querySelector('.chat-header-title');
   if (!title) return;
-
   if (!state.currentSessionKey || state.currentSessionKey === 'default') {
     title.textContent = 'OpenClaw';
     return;
   }
-
-  const session = (Array.isArray(state.sessions) ? state.sessions : []).find((item) => (
-    item && item.sessionKey === state.currentSessionKey
-  ));
+  const session = (Array.isArray(state.sessions) ? state.sessions : []).find((item) => item && item.sessionKey === state.currentSessionKey);
   const label = typeof session?.label === 'string' && session.label.trim() ? session.label : state.currentSessionKey;
   title.textContent = label;
 }
-function activeChatItem() { return state.currentItem === 'openclaw' || state.currentItem.startsWith('session:'); }
 function resizeChatInput() {
   if (!chatInput) return;
   chatInput.style.height = 'auto';
@@ -69,35 +33,6 @@ function resizeChatInput() {
   chatInput.style.height = `${nextHeight}px`;
   chatInput.style.overflowY = chatInput.scrollHeight > 120 ? 'auto' : 'hidden';
 }
-function markBotUnread() {
-  if (activeChatItem()) return;
-  state.unreadCount += 1;
-  updateOpenClawBadgeRef();
-}
-function notifyIncomingBotMessage(text) {
-  if (document.hasFocus()) return;
-  const body = String(text || '')
-    .replace(/```[\s\S]*?```|`[^`]*`|!\[[^\]]*\]\([^)]+\)/g, ' ')
-    .replace(/\[([^\]]+)\]\([^)]+\)|[#>*_~]/g, '$1')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 100);
-  if (!body) return;
-  window.tgclaw.notifyChatMessage({ title: 'OpenClaw', body });
-}
-function scrollChatToBottom() {
-  const container = document.getElementById('chat-messages');
-  if (container) container.scrollTop = container.scrollHeight;
-}
-function updateEmptyState() {
-  const container = document.getElementById('chat-messages');
-  const emptyState = document.getElementById('chat-empty-state');
-  if (!container || !emptyState) return;
-  const hasMessages = Boolean(container.querySelector('.message'));
-  emptyState.style.display = hasMessages ? 'none' : 'flex';
-}
-function showStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'inline-flex'; }
-function hideStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'none'; }
 function clearTypingIndicator() {
   if (!typingIndicatorDiv) return;
   typingIndicatorDiv.remove();
@@ -117,6 +52,8 @@ function showTypingIndicator() {
   updateEmptyState();
   scrollChatToBottom();
 }
+function showStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'inline-flex'; }
+function hideStopButton() { const btn = document.getElementById('chat-stop'); if (btn) btn.style.display = 'none'; }
 function abortChat() {
   if (!isStreaming || !currentRunId) return;
   void gateway.chatAbort(state.currentSessionKey, currentRunId).catch(() => {});
@@ -178,31 +115,6 @@ export async function reloadChatHistory() {
     // no-op
   }
   updateEmptyState();
-}
-export function appendMessage(text, cls, options = {}) {
-  const animate = options.animate !== false;
-  if (cls === 'from-bot') markBotUnread();
-  const container = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = `message ${cls}`;
-  if (cls === 'from-bot') renderBotMessage(div, text);
-  else div.textContent = text;
-  container.appendChild(div);
-  animateMessageEntry(div, animate);
-  scrollChatToBottom();
-  updateEmptyState();
-  return div;
-}
-function createStreamMessage() {
-  markBotUnread();
-  const container = document.getElementById('chat-messages');
-  const div = document.createElement('div');
-  div.className = 'message from-bot';
-  container.appendChild(div);
-  animateMessageEntry(div);
-  updateEmptyState();
-  scrollChatToBottom();
-  return div;
 }
 function extractMessageContent(message) {
   if (typeof message === 'string') return message;
@@ -305,7 +217,6 @@ function handleGatewayChat(frame) {
     appendMessage(`Gateway error: ${message}`, 'from-bot');
   }
 }
-
 export function sendChat() {
   const text = chatInput?.value.trim();
   if (!text) return;
