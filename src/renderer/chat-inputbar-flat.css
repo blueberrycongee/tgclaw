@@ -1,0 +1,4 @@
+/* Remove composer divider line to keep chat area visually continuous. */
+#chat-input-bar {
+  border-top: none;
+}
