@@ -29,7 +29,15 @@ export async function initSettings() {
   gateway.on('error', () => updateConnectionStatus('disconnected'));
 
   updateConnectionStatus(gateway.connected ? 'connected' : 'disconnected');
-  await loadSavedConfig();
+  const savedConfig = await loadSavedConfig();
+  if (savedConfig?.url && !gateway.connected) {
+    updateConnectionStatus('connecting');
+    try {
+      await gateway.connect(savedConfig.url, savedConfig.token);
+    } catch {
+      updateConnectionStatus('disconnected');
+    }
+  }
 }
 
 async function loadSavedConfig() {
@@ -38,6 +46,7 @@ async function loadSavedConfig() {
   const token = typeof saved?.token === 'string' ? saved.token : '';
   if (urlInput) urlInput.value = url;
   if (tokenInput) tokenInput.value = token;
+  return { url, token };
 }
 
 export function showSettings() {
