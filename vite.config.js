@@ -3,6 +3,10 @@ const { defineConfig } = require('vite');
 module.exports = defineConfig({
   root: 'src/renderer',
   base: './',
+  server: {
+    port: 5173,
+    strictPort: true,
+  },
   build: {
     outDir: '../../dist/renderer',
     rollupOptions: {
