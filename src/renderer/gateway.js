@@ -424,6 +424,7 @@ class GatewayClient {
         deviceFamily: CLIENT_DEVICE_FAMILY,
         mode: CLIENT_MODE,
       },
+      caps: ['tool-events'],
       role,
       scopes,
     };
