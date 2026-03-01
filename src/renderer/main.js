@@ -126,6 +126,57 @@ async function initProjects() {
   updateWindowTitle();
 }
 
+function readTerminalBufferText(tab) {
+  const buffer = tab?.term?.buffer?.active;
+  if (!buffer || typeof buffer.length !== 'number' || typeof buffer.getLine !== 'function') return '';
+  const lines = [];
+  for (let index = 0; index < buffer.length; index += 1) {
+    const line = buffer.getLine(index);
+    if (!line || typeof line.translateToString !== 'function') continue;
+    lines.push(line.translateToString(true));
+  }
+  return lines.join('\n').replace(/\u0000/g, '').trimEnd();
+}
+
+function installE2EBridge() {
+  if (!window.tgclaw?.isE2E) return;
+  window.__TGCLAW_E2E__ = {
+    snapshot() {
+      const tabsByProject = {};
+      Object.entries(state.tabs).forEach(([projectId, tabs]) => {
+        tabsByProject[projectId] = (tabs || []).map((tab) => ({
+          id: tab.id,
+          type: tab.type,
+          name: getTabDisplayName(tab),
+          exited: tab.exited === true,
+          terminalSessionId: tab.terminalSessionId || '',
+        }));
+      });
+      return {
+        currentItem: state.currentItem,
+        projects: (state.projects || []).map((project) => ({
+          id: project.id,
+          name: project.name,
+          cwd: project.cwd,
+        })),
+        activeTab: { ...state.activeTab },
+        tabsByProject,
+      };
+    },
+    getTabText(projectId, tabId) {
+      if (!projectId || !tabId) return '';
+      const tab = (state.tabs[projectId] || []).find((item) => item.id === tabId);
+      if (!tab) return '';
+      return readTerminalBufferText(tab);
+    },
+    emitGatewayEvent(frame) {
+      const injector = window.__TGCLAW_E2E_CHAT__?.injectGatewayEvent;
+      if (typeof injector !== 'function') return false;
+      return injector(frame);
+    },
+  };
+}
+
 initSidebarBindings();
 initQuickLaunchBindings();
 initAgentPicker();
@@ -135,5 +186,6 @@ initChat();
 initThemeToggle();
 void initSettings();
 bindGlobalEvents();
+installE2EBridge();
 
 void initProjects();
