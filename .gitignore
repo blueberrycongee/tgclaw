@@ -3,3 +3,13 @@ node_modules/
 dist/
 release/
 .codex/
+output/
+
+# OpenClaw runtime state and agent templates (not used by TGClaw)
+.openclaw/
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
