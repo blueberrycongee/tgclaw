@@ -124,6 +124,68 @@ export function createBaseTerminal() {
   return new Terminal({ theme: getTerminalTheme(state.terminalTheme), fontSize: 13, fontFamily: 'ui-monospace, Menlo, Monaco, "Cascadia Mono", "Segoe UI Mono", "Roboto Mono", "Oxygen Mono", "Ubuntu Monospace", "Source Code Pro", "Fira Mono", "Droid Sans Mono", "Courier New", monospace', cursorBlink: true, allowProposedApi: true });
 }
 
+export async function createVirtualTerminal({
+  tabId,
+  project,
+  visible = true,
+  terminalSessionId = '',
+  onExit,
+  onOutput,
+}) {
+  const wrapper = document.createElement('div');
+  wrapper.className = visible ? 'terminal-wrapper active' : 'terminal-wrapper';
+  wrapper.id = `term-${tabId}`;
+  document.getElementById('terminal-container').appendChild(wrapper);
+
+  const term = createBaseTerminal();
+  const fitAddon = new FitAddon();
+  const searchAddon = new SearchAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(searchAddon);
+  term.loadAddon(new WebLinksAddon());
+  term.open(wrapper);
+  setTimeout(() => fitAddon.fit(), 100);
+
+  let lastActivityAt = Date.now();
+  const outputBuffer = [];
+  let exited = false;
+  const normalizedSessionId = normalizeTerminalSessionId(terminalSessionId);
+
+  function appendOutput(text) {
+    if (typeof text !== 'string' || !text) return;
+    lastActivityAt = Date.now();
+    outputBuffer.push(text);
+    term.write(text);
+    if (typeof onOutput === 'function') onOutput();
+  }
+
+  function markExited(code = 0) {
+    exited = true;
+    if (typeof onExit === 'function') onExit(code);
+  }
+
+  return {
+    termId: null,
+    terminalSessionId: normalizedSessionId,
+    pid: null,
+    sessionMeta: null,
+    term,
+    fitAddon,
+    searchAddon,
+    exited,
+    lastActivityAt,
+    wrapperEl: wrapper,
+    appendOutput,
+    markExited,
+    getOutput: () => outputBuffer.join(''),
+    getLastActivityAt: () => lastActivityAt,
+    cleanup: () => {
+      term.dispose();
+      wrapper.remove();
+    },
+  };
+}
+
 export async function createTerminal({
   tabId,
   type,

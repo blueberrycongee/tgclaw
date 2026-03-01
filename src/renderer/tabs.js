@@ -1,7 +1,13 @@
 import { state } from './state.js';
 import { agentLabel, escapeHtml } from './utils.js';
 import { renderAgentIcon, renderIcon } from './icons.js';
-import { closeTerminalSearch, createTerminal, hideAllTerminals, showTerminal } from './terminal.js';
+import {
+  closeTerminalSearch,
+  createTerminal,
+  createVirtualTerminal,
+  hideAllTerminals,
+  showTerminal,
+} from './terminal.js';
 const deps = { renderProjects: () => {}, updateWindowTitle: () => {} };
 let agentPickerSelectionLocked = false;
 let addTabHoverHideTimer = null;
@@ -183,34 +189,49 @@ export async function addAgentTab(type, options = {}) {
 
   const tabId = `tab-${Date.now()}`;
   if (!state.tabs[project.id]) state.tabs[project.id] = [];
-  const terminal = await createTerminal({
-    tabId,
-    type: tabType,
-    command,
-    commandArgs,
-    captureExecution,
-    terminalSessionId: requestedSessionId,
-    terminalRequest,
-    keepAliveOnCleanup: options.keepAliveOnCleanup === true,
-    project,
-    visible: isActiveProject,
-    onOutput: () => onProjectOutput(project.id),
-    onExit: () => {
-      const tab = (state.tabs[project.id] || []).find((item) => item.id === tabId);
-      if (!tab) return;
-      tab.exited = true;
-      deps.renderProjects();
-      if (state.currentItem === project.id) renderTabs(project.id);
-    },
-    onRestart: () => {
-      closeTab(project.id, tabId);
-      addAgentTab(type, {
-        command,
-        commandArgs,
-        projectId: project.id,
-      });
-    },
-  });
+  const terminal = options.virtual
+    ? await createVirtualTerminal({
+      tabId,
+      project,
+      visible: isActiveProject,
+      terminalSessionId: requestedSessionId,
+      onOutput: () => onProjectOutput(project.id),
+      onExit: () => {
+        const tab = (state.tabs[project.id] || []).find((item) => item.id === tabId);
+        if (!tab) return;
+        tab.exited = true;
+        deps.renderProjects();
+        if (state.currentItem === project.id) renderTabs(project.id);
+      },
+    })
+    : await createTerminal({
+      tabId,
+      type: tabType,
+      command,
+      commandArgs,
+      captureExecution,
+      terminalSessionId: requestedSessionId,
+      terminalRequest,
+      keepAliveOnCleanup: options.keepAliveOnCleanup === true,
+      project,
+      visible: isActiveProject,
+      onOutput: () => onProjectOutput(project.id),
+      onExit: () => {
+        const tab = (state.tabs[project.id] || []).find((item) => item.id === tabId);
+        if (!tab) return;
+        tab.exited = true;
+        deps.renderProjects();
+        if (state.currentItem === project.id) renderTabs(project.id);
+      },
+      onRestart: () => {
+        closeTab(project.id, tabId);
+        addAgentTab(type, {
+          command,
+          commandArgs,
+          projectId: project.id,
+        });
+      },
+    });
   const tabRecord = {
     id: tabId,
     type: tabType,
