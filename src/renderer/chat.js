@@ -43,6 +43,10 @@ const MAX_CAPTURED_EXTERNAL_EXECUTIONS = 400;
 const pendingExternalExecCalls = new Map();
 const capturedExternalExecutionKeys = [];
 const capturedExternalExecutionSet = new Set();
+const openclawToolTabsByToolCallId = new Map();
+const openclawToolTabsBySessionId = new Map();
+const pendingProcessInputsBySessionId = new Map();
+let gatewayToolEventsEnabled = false;
 
 function trimToString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -100,6 +104,96 @@ function normalizeToolArguments(value) {
   } catch {
     return {};
   }
+}
+
+function normalizeTerminalLineEndings(value) {
+  if (typeof value !== 'string') return '';
+  if (!value) return '';
+  return value.replace(/\r?\n/g, '\r\n');
+}
+
+function extractToolResultText(result) {
+  if (!result || typeof result !== 'object') return '';
+  const content = Array.isArray(result.content) ? result.content : [];
+  if (content.length === 0) return '';
+  return content
+    .map((item) => (item && item.type === 'text' && typeof item.text === 'string' ? item.text : ''))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function extractToolResultDetails(result) {
+  if (!result || typeof result !== 'object') return {};
+  const details = result.details;
+  return details && typeof details === 'object' ? details : {};
+}
+
+function resolveOpenclawTabEntryByToolCallId(toolCallId) {
+  if (!toolCallId) return null;
+  const entry = openclawToolTabsByToolCallId.get(toolCallId);
+  if (!entry) return null;
+  const tabs = state.tabs[entry.projectId] || [];
+  const stillOpen = tabs.some((tab) => tab.id === entry.tabId);
+  if (stillOpen) return entry;
+  openclawToolTabsByToolCallId.delete(toolCallId);
+  if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+  return null;
+}
+
+function resolveOpenclawTabEntryBySessionId(sessionId) {
+  if (!sessionId) return null;
+  const entry = openclawToolTabsBySessionId.get(sessionId);
+  if (!entry) return null;
+  const tabs = state.tabs[entry.projectId] || [];
+  const stillOpen = tabs.some((tab) => tab.id === entry.tabId);
+  if (stillOpen) return entry;
+  openclawToolTabsBySessionId.delete(sessionId);
+  openclawToolTabsByToolCallId.delete(entry.toolCallId);
+  return null;
+}
+
+function appendOpenclawOutput(entry, text) {
+  if (!entry || !text) return;
+  const normalized = normalizeTerminalLineEndings(text);
+  if (!normalized) return;
+  entry.hasOutput = true;
+  if (typeof entry.tab.appendOutput === 'function') {
+    entry.tab.appendOutput(normalized);
+    return;
+  }
+  if (entry.tab.term?.write) {
+    entry.tab.term.write(normalized);
+  }
+}
+
+function appendOpenclawInput(entry, text) {
+  if (!entry || !text) return;
+  const normalized = normalizeTerminalLineEndings(text);
+  if (!normalized) return;
+  if (typeof entry.tab.appendOutput === 'function') {
+    entry.tab.appendOutput(normalized);
+    return;
+  }
+  if (entry.tab.term?.write) {
+    entry.tab.term.write(normalized);
+  }
+}
+
+function appendOpenclawTail(entry, tailText) {
+  const normalized = normalizeTerminalLineEndings(tailText);
+  if (!normalized) return;
+  if (!entry.lastTail) {
+    appendOpenclawOutput(entry, normalized);
+    entry.lastTail = normalized;
+    return;
+  }
+  if (normalized.startsWith(entry.lastTail)) {
+    const delta = normalized.slice(entry.lastTail.length);
+    appendOpenclawOutput(entry, delta);
+  } else if (!entry.lastTail.endsWith(normalized)) {
+    appendOpenclawOutput(entry, `\r\n${normalized}`);
+  }
+  entry.lastTail = normalized;
 }
 
 function parseExternalExecToolCalls(message) {
@@ -315,6 +409,17 @@ function normalizeProjectPath(value) {
   const path = trimToString(value);
   if (!path) return '';
   return path.replace(/[/\\]+$/, '');
+}
+
+function resolveProjectForWorkdir(workdir) {
+  const normalized = normalizeProjectPath(workdir);
+  if (!normalized) return null;
+  return state.projects.find((project) => {
+    const projectCwd = normalizeProjectPath(project.cwd);
+    if (!projectCwd) return false;
+    if (normalized === projectCwd) return true;
+    return normalized.startsWith(`${projectCwd}/`) || normalized.startsWith(`${projectCwd}\\`);
+  }) || null;
 }
 
 function parseCliLaunchSpec(frame) {
@@ -539,8 +644,166 @@ async function startTerminalFromGatewayRequest(request) {
   }
 }
 
+function registerOpenclawSession(entry, sessionId) {
+  const normalized = trimToString(sessionId);
+  if (!normalized) return;
+  if (entry.sessionId === normalized) return;
+  entry.sessionId = normalized;
+  entry.tab.terminalSessionId = normalized;
+  openclawToolTabsBySessionId.set(normalized, entry);
+  const pending = pendingProcessInputsBySessionId.get(normalized);
+  if (pending && pending.length > 0) {
+    pending.forEach((text) => appendOpenclawInput(entry, text));
+    pendingProcessInputsBySessionId.delete(normalized);
+  }
+}
+
+function resolveProcessInputFromArgs(args) {
+  if (!args || typeof args !== 'object') return '';
+  const action = trimToString(args.action).toLowerCase();
+  if (action === 'write') return typeof args.data === 'string' ? args.data : '';
+  if (action === 'paste') return typeof args.text === 'string' ? args.text : '';
+  if (action === 'submit') return '\r';
+  if (action === 'send-keys') return typeof args.literal === 'string' ? args.literal : '';
+  return '';
+}
+
+async function handleOpenclawExecToolEvent(phase, data) {
+  const toolCallId = trimToString(data.toolCallId);
+  if (!toolCallId) return;
+
+  if (phase === 'start') {
+    if (openclawToolTabsByToolCallId.has(toolCallId)) return;
+    const args = data.args && typeof data.args === 'object' ? data.args : {};
+    const commandText = trimToString(args.command);
+    const workdir = normalizeProjectPath(trimToString(args.workdir || args.cwd));
+    const pty = args.pty === true;
+    if (!pty || !commandText) return;
+    const project = resolveProjectForWorkdir(workdir);
+    if (!project) {
+      if (isChatItemId(state.currentItem)) {
+        appendMessage(`OpenClaw started a CLI in ${workdir || 'unknown folder'}, but no matching project is open.`, 'from-bot message-error');
+      }
+      return;
+    }
+
+    const parsed = parseCommandStringWithArgs(commandText);
+    const command = trimToString(parsed.command || commandText);
+    const commandArgs = parseCommandArgs(parsed.args);
+    try {
+      const tab = await addAgentTab(command || 'shell', {
+        projectId: project.id,
+        command,
+        commandArgs,
+        virtual: true,
+      });
+      const entry = {
+        toolCallId,
+        tabId: tab.id,
+        projectId: project.id,
+        tab,
+        sessionId: '',
+        lastTail: '',
+        hasOutput: false,
+      };
+      openclawToolTabsByToolCallId.set(toolCallId, entry);
+      appendOpenclawInput(entry, `${commandText}\n`);
+    } catch {
+      // no-op: terminal creation errors surface in UI
+    }
+    return;
+  }
+
+  const entry = resolveOpenclawTabEntryByToolCallId(toolCallId);
+  if (!entry) return;
+
+  if (phase === 'update') {
+    const partialResult = data.partialResult && typeof data.partialResult === 'object' ? data.partialResult : null;
+    const details = extractToolResultDetails(partialResult);
+    const sessionId = trimToString(details.sessionId);
+    if (sessionId) registerOpenclawSession(entry, sessionId);
+    const tail = typeof details.tail === 'string' ? details.tail : '';
+    const text = tail || extractToolResultText(partialResult);
+    if (text) appendOpenclawTail(entry, text);
+    return;
+  }
+
+  if (phase === 'result') {
+    const result = data.result && typeof data.result === 'object' ? data.result : null;
+    const details = extractToolResultDetails(result);
+    const sessionId = trimToString(details.sessionId);
+    if (sessionId) registerOpenclawSession(entry, sessionId);
+    if (!entry.hasOutput) {
+      const text = extractToolResultText(result);
+      if (text) appendOpenclawOutput(entry, text);
+    }
+
+    const status = trimToString(details.status).toLowerCase();
+    if (status === 'approval-pending') {
+      const command = trimToString(details.command);
+      const message = command
+        ? `\r\n[Approval required to run: ${command}]\r\n`
+        : '\r\n[Approval required to run command]\r\n';
+      appendOpenclawOutput(entry, message);
+      return;
+    }
+
+    if (status === 'completed' || status === 'failed') {
+      const exitCode = Number.isInteger(details.exitCode) ? details.exitCode : null;
+      const exitLabel = exitCode === null ? 'unknown' : String(exitCode);
+      appendOpenclawOutput(entry, `\r\n[Process exited with code ${exitLabel}]\r\n`);
+      if (typeof entry.tab.markExited === 'function') {
+        entry.tab.markExited(exitCode ?? 0);
+      }
+      openclawToolTabsByToolCallId.delete(toolCallId);
+      if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+    }
+  }
+}
+
+function handleOpenclawProcessToolEvent(phase, data) {
+  if (phase !== 'start') return;
+  const args = data.args && typeof data.args === 'object' ? data.args : {};
+  const sessionId = trimToString(args.sessionId);
+  if (!sessionId) return;
+  const input = resolveProcessInputFromArgs(args);
+  if (!input) return;
+  const normalized = normalizeTerminalLineEndings(input);
+  if (!normalized) return;
+  const entry = resolveOpenclawTabEntryBySessionId(sessionId);
+  if (entry) {
+    appendOpenclawInput(entry, normalized);
+    return;
+  }
+  const pending = pendingProcessInputsBySessionId.get(sessionId) || [];
+  pending.push(normalized);
+  pendingProcessInputsBySessionId.set(sessionId, pending);
+}
+
+function handleGatewayAgentEvent(frame) {
+  const payload = frame?.payload ?? frame?.data ?? frame?.params ?? frame;
+  if (!payload || typeof payload !== 'object') return;
+  const stream = trimToString(payload.stream).toLowerCase();
+  if (stream !== 'tool') return;
+  const data = payload.data && typeof payload.data === 'object' ? payload.data : {};
+  const phase = trimToString(data.phase).toLowerCase();
+  const name = trimToString(data.name).toLowerCase();
+  if (!phase || !name) return;
+  if (name === 'exec') {
+    void handleOpenclawExecToolEvent(phase, data);
+    return;
+  }
+  if (name === 'process') {
+    handleOpenclawProcessToolEvent(phase, data);
+  }
+}
+
 function handleGatewayEventFrame(frame) {
   if (!frame || typeof frame !== 'object') return;
+  if (frame.event === 'agent') {
+    handleGatewayAgentEvent(frame);
+    return;
+  }
   if (frame.event === 'terminal.request.start') {
     const request = normalizeTerminalStartPayload(frame.payload);
     if (!request) return;
@@ -1061,7 +1324,9 @@ function formatGatewayErrorMessage(rawMessage) {
   return `${message} Hint: if Claude Code works with the same relay, check OpenClaw provider headers/auth mode (Bearer auth + Claude CLI headers).`;
 }
 function handleGatewayChat(frame) {
-  captureExternalExecutionEvidence(frame);
+  if (!gatewayToolEventsEnabled) {
+    captureExternalExecutionEvidence(frame);
+  }
 
   const eventState = typeof frame?.state === 'string' ? frame.state : '';
   const { key: runKey, sessionKey: frameSessionKey, runId: frameRunId } = streamRunKey(frame);
@@ -1245,16 +1510,21 @@ export function initChat() {
   gateway.on('event', handleGatewayEventFrame);
   gateway.on('connected', (helloPayload) => {
     applyGatewaySessionDefaults(helloPayload);
+    gatewayToolEventsEnabled = Array.isArray(helloPayload?.features?.events)
+      ? helloPayload.features.events.includes('agent')
+      : true;
     gatewayOnline = true;
     renderChatHeaderStatus();
     void reloadChatHistory();
   });
   gateway.on('disconnected', () => {
     gatewayOnline = false;
+    gatewayToolEventsEnabled = false;
     resetStreamingState();
   });
   gateway.on('error', () => {
     gatewayOnline = false;
+    gatewayToolEventsEnabled = false;
     resetStreamingState();
   });
 
