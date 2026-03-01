@@ -9,6 +9,7 @@ function onIpc(channel) {
 }
 
 contextBridge.exposeInMainWorld('tgclaw', {
+  isE2E: process.env.TGCLAW_E2E === '1',
   createPty: (opts) => ipcRenderer.invoke('pty:create', opts),
   spawnAgent: (opts) => ipcRenderer.invoke('agent:spawn', opts),
   spawnCommand: (opts) => ipcRenderer.invoke('pty:spawn-command', opts),
