@@ -1510,9 +1510,7 @@ export function initChat() {
   gateway.on('event', handleGatewayEventFrame);
   gateway.on('connected', (helloPayload) => {
     applyGatewaySessionDefaults(helloPayload);
-    gatewayToolEventsEnabled = Array.isArray(helloPayload?.features?.events)
-      ? helloPayload.features.events.includes('agent')
-      : true;
+    gatewayToolEventsEnabled = true;
     gatewayOnline = true;
     renderChatHeaderStatus();
     void reloadChatHistory();
