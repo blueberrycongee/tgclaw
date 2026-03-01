@@ -824,6 +824,17 @@ function handleGatewayEventFrame(frame) {
     }
   }
 }
+
+function installChatE2EBridge() {
+  if (!window.tgclaw?.isE2E) return;
+  window.__TGCLAW_E2E_CHAT__ = {
+    injectGatewayEvent(frame) {
+      if (!frame || typeof frame !== 'object') return false;
+      handleGatewayEventFrame(frame);
+      return true;
+    },
+  };
+}
 export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
 function normalizeSessionKeyForGateway(sessionKey) {
   const key = typeof sessionKey === 'string' && sessionKey.trim() ? sessionKey.trim() : 'default';
@@ -1531,5 +1542,6 @@ export function initChat() {
   updateChatHeader();
   updateEmptyState();
   resizeChatInput();
+  installChatE2EBridge();
   void hydrateChatFromCache();
 }
