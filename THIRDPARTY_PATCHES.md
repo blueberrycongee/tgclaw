@@ -186,3 +186,57 @@ Added guarded reuse logic in `exec`:
 
 - Added targeted unit tests in:
   - `src/agents/bash-tools.exec.reuse.test.ts`
+
+### Patch #6: Prefer full raw PTY replay buffer on terminal attach
+
+**Files**:
+- `src/gateway/server-methods/terminal-sessions.ts`
+- `src/gateway/server-methods/terminal-sessions.test.ts`
+
+#### Problem
+
+`terminal.session.attach` used `rawTail` (last ~2000 chars) as the primary replay source.
+For TUI apps (Claude Code), attaching from a truncated tail can start mid-frame/mid-escape sequence,
+which renders as broken UI fragments (missing glyphs, shifted menu text, partial control sequences).
+
+#### Solution
+
+Changed recent output selection order for running sessions to:
+1. `rawAggregated` (full bounded raw buffer)
+2. `rawTail`
+3. sanitized `tail` / `aggregated`
+
+This aligns attach replay with the same raw stream used for live PTY output events, reducing
+mid-sequence attach corruption.
+
+#### Validation
+
+- Added unit coverage in:
+  - `src/gateway/server-methods/terminal-sessions.test.ts`
+- Tests verify fallback ordering (`rawAggregated` → `rawTail` → sanitized output).
+
+### Patch #7: Strip leaked `assistant to=functions.*` text tool stubs from user-facing output
+
+**Files**:
+- `src/agents/pi-embedded-utils.ts`
+- `src/agents/pi-embedded-utils.test.ts`
+
+#### Problem
+
+Some provider responses occasionally leak internal tool-call stubs into assistant text, e.g.:
+- `assistant to=functions.process ...`
+- followed by raw JSON arguments (optionally fenced as ```json)
+
+These are implementation artifacts and should not appear in end-user chat content.
+
+#### Solution
+
+Extended `stripDowngradedToolCallText()` to detect and remove leaked
+`assistant to=functions.<tool>` text markers plus their JSON payload blocks
+(plain or fenced), while preserving surrounding user-facing text.
+
+#### Validation
+
+- Added regression coverage in:
+  - `src/agents/pi-embedded-utils.test.ts`
+- New tests include plain JSON and fenced JSON leakage cases.
