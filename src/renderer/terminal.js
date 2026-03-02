@@ -131,6 +131,8 @@ export async function createVirtualTerminal({
   terminalSessionId = '',
   onExit,
   onOutput,
+  onInput,
+  onResize,
 }) {
   const wrapper = document.createElement('div');
   wrapper.className = visible ? 'terminal-wrapper active' : 'terminal-wrapper';
@@ -149,7 +151,14 @@ export async function createVirtualTerminal({
   let lastActivityAt = Date.now();
   const outputBuffer = [];
   let exited = false;
-  const normalizedSessionId = normalizeTerminalSessionId(terminalSessionId);
+  let normalizedSessionId = normalizeTerminalSessionId(terminalSessionId);
+  const inputDisposable = term.onData((data) => {
+    lastActivityAt = Date.now();
+    if (typeof onInput === 'function') onInput(data);
+  });
+  const resizeDisposable = term.onResize(({ cols, rows }) => {
+    if (typeof onResize === 'function') onResize(cols, rows);
+  });
 
   function appendOutput(text) {
     if (typeof text !== 'string' || !text) return;
@@ -164,7 +173,7 @@ export async function createVirtualTerminal({
     if (typeof onExit === 'function') onExit(code);
   }
 
-  return {
+  const virtualTerminal = {
     termId: null,
     terminalSessionId: normalizedSessionId,
     pid: null,
@@ -177,13 +186,20 @@ export async function createVirtualTerminal({
     wrapperEl: wrapper,
     appendOutput,
     markExited,
+    setTerminalSessionId: (value) => {
+      normalizedSessionId = normalizeTerminalSessionId(value);
+      virtualTerminal.terminalSessionId = normalizedSessionId;
+    },
     getOutput: () => outputBuffer.join(''),
     getLastActivityAt: () => lastActivityAt,
     cleanup: () => {
+      inputDisposable.dispose();
+      resizeDisposable.dispose();
       term.dispose();
       wrapper.remove();
     },
   };
+  return virtualTerminal;
 }
 
 export async function createTerminal({
@@ -364,8 +380,8 @@ export async function createTerminal({
       cleanupData();
       cleanupExit();
       cleanupInput();
-    cleanupResize();
-    cleanupRestart();
+      cleanupResize();
+      cleanupRestart();
       if (!isCapturedExecution && !keepAliveOnCleanup && activeSessionId) {
         window.tgclaw.killTerminalSession(activeSessionId);
       } else if (!isCapturedExecution && !keepAliveOnCleanup && typeof termId === 'number') {

@@ -196,6 +196,8 @@ export async function addAgentTab(type, options = {}) {
       visible: isActiveProject,
       terminalSessionId: requestedSessionId,
       onOutput: () => onProjectOutput(project.id),
+      onInput: typeof options.onVirtualInput === 'function' ? options.onVirtualInput : null,
+      onResize: typeof options.onVirtualResize === 'function' ? options.onVirtualResize : null,
       onExit: () => {
         const tab = (state.tabs[project.id] || []).find((item) => item.id === tabId);
         if (!tab) return;

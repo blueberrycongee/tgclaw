@@ -46,11 +46,14 @@ const capturedExternalExecutionSet = new Set();
 const openclawToolTabsByToolCallId = new Map();
 const openclawToolTabsBySessionId = new Map();
 const pendingProcessInputsBySessionId = new Map();
+const pendingOperatorInputsByToolCallId = new Map();
+const pendingOperatorResizeByToolCallId = new Map();
 const openclawSessionBindingTimeoutsByToolCallId = new Map();
 const OPENCLAW_EXEC_SESSION_BIND_TIMEOUT_MS = window.tgclaw?.isE2E ? 1200 : 6000;
 const OPENCLAW_PROCESS_SESSION_BACKFILL_MAX_AGE_MS = window.tgclaw?.isE2E ? 120000 : 30000;
 const INTERACTIVE_AGENT_COMMANDS = new Set(['claude', 'codex', 'opencode', 'gemini', 'kimi', 'goose', 'aider']);
 let gatewayToolEventsEnabled = false;
+let gatewayTerminalSessionsEnabled = false;
 let openclawToolPayloadCompatWarned = false;
 
 function trimToString(value) {
@@ -291,6 +294,8 @@ function resolveOpenclawTabEntryByToolCallId(toolCallId) {
   if (stillOpen) return entry;
   clearOpenclawSessionBindingTimeout(toolCallId);
   openclawToolTabsByToolCallId.delete(toolCallId);
+  pendingOperatorInputsByToolCallId.delete(toolCallId);
+  pendingOperatorResizeByToolCallId.delete(toolCallId);
   if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
   return null;
 }
@@ -305,6 +310,8 @@ function resolveOpenclawTabEntryBySessionId(sessionId) {
   openclawToolTabsBySessionId.delete(sessionId);
   clearOpenclawSessionBindingTimeout(entry.toolCallId);
   openclawToolTabsByToolCallId.delete(entry.toolCallId);
+  pendingOperatorInputsByToolCallId.delete(entry.toolCallId);
+  pendingOperatorResizeByToolCallId.delete(entry.toolCallId);
   return null;
 }
 
@@ -830,14 +837,167 @@ async function startTerminalFromGatewayRequest(request) {
   }
 }
 
+async function writeOpenclawTerminalSession(sessionId, data) {
+  const normalized = trimToString(sessionId);
+  if (!normalized || typeof data !== 'string' || !data) return false;
+  if (!gateway.connected || !gatewayTerminalSessionsEnabled) return false;
+  try {
+    await gateway.send('terminal.session.write', { sessionId: normalized, data });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resizeOpenclawTerminalSession(sessionId, cols, rows) {
+  const normalized = trimToString(sessionId);
+  if (!normalized) return false;
+  if (!Number.isFinite(cols) || !Number.isFinite(rows)) return false;
+  if (!gateway.connected || !gatewayTerminalSessionsEnabled) return false;
+  const safeCols = Math.max(1, Math.floor(cols));
+  const safeRows = Math.max(1, Math.floor(rows));
+  try {
+    await gateway.send('terminal.session.resize', { sessionId: normalized, cols: safeCols, rows: safeRows });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function flushPendingOpenclawOperatorInput(entry) {
+  if (!entry || entry.mode !== 'session') return;
+  const toolCallId = trimToString(entry.toolCallId);
+  if (!toolCallId || !entry.sessionId) return;
+  const pending = pendingOperatorInputsByToolCallId.get(toolCallId);
+  if (!Array.isArray(pending) || pending.length === 0) return;
+  pendingOperatorInputsByToolCallId.delete(toolCallId);
+  for (let index = 0; index < pending.length; index += 1) {
+    const chunk = pending[index];
+    const ok = await writeOpenclawTerminalSession(entry.sessionId, chunk);
+    if (ok) continue;
+    pendingOperatorInputsByToolCallId.set(toolCallId, pending.slice(index));
+    return;
+  }
+}
+
+async function flushPendingOpenclawOperatorResize(entry) {
+  if (!entry || entry.mode !== 'session') return;
+  const toolCallId = trimToString(entry.toolCallId);
+  if (!toolCallId || !entry.sessionId) return;
+  const pending = pendingOperatorResizeByToolCallId.get(toolCallId);
+  if (!pending || typeof pending !== 'object') return;
+  const ok = await resizeOpenclawTerminalSession(entry.sessionId, pending.cols, pending.rows);
+  if (ok) pendingOperatorResizeByToolCallId.delete(toolCallId);
+}
+
+function queueOpenclawOperatorInput(entry, data) {
+  if (!entry || entry.mode !== 'session') return;
+  if (typeof data !== 'string' || !data) return;
+  const toolCallId = trimToString(entry.toolCallId);
+  if (!toolCallId) return;
+  if (entry.sessionId && entry.sessionAttached === true) {
+    void writeOpenclawTerminalSession(entry.sessionId, data).then((ok) => {
+      if (ok) return;
+      const pending = pendingOperatorInputsByToolCallId.get(toolCallId) || [];
+      pending.push(data);
+      pendingOperatorInputsByToolCallId.set(toolCallId, pending);
+    });
+    return;
+  }
+  const pending = pendingOperatorInputsByToolCallId.get(toolCallId) || [];
+  pending.push(data);
+  pendingOperatorInputsByToolCallId.set(toolCallId, pending);
+}
+
+function queueOpenclawOperatorResize(entry, cols, rows) {
+  if (!entry || entry.mode !== 'session') return;
+  if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
+  const toolCallId = trimToString(entry.toolCallId);
+  if (!toolCallId) return;
+  if (entry.sessionId && entry.sessionAttached === true) {
+    void resizeOpenclawTerminalSession(entry.sessionId, cols, rows).then((ok) => {
+      if (ok) return;
+      pendingOperatorResizeByToolCallId.set(toolCallId, {
+        cols: Math.max(1, Math.floor(cols)),
+        rows: Math.max(1, Math.floor(rows)),
+      });
+    });
+    return;
+  }
+  pendingOperatorResizeByToolCallId.set(toolCallId, {
+    cols: Math.max(1, Math.floor(cols)),
+    rows: Math.max(1, Math.floor(rows)),
+  });
+}
+
+async function attachOpenclawTerminalSession(entry, sessionId) {
+  if (!entry || entry.mode !== 'session') return;
+  const normalized = trimToString(sessionId);
+  if (!normalized || !gatewayTerminalSessionsEnabled || !gateway.connected) return;
+  if (entry.sessionAttached === true && entry.sessionId === normalized) {
+    await flushPendingOpenclawOperatorInput(entry);
+    await flushPendingOpenclawOperatorResize(entry);
+    return;
+  }
+  if (entry.attachInFlight === normalized) return;
+  entry.attachInFlight = normalized;
+  try {
+    const payload = await gateway.send('terminal.session.attach', { sessionId: normalized });
+    entry.sessionAttached = true;
+    entry.attachInFlight = '';
+    const recentOutput = typeof payload?.recentOutput === 'string' ? payload.recentOutput : '';
+    if (recentOutput && !entry.hasOutput) appendOpenclawOutput(entry, recentOutput);
+    await flushPendingOpenclawOperatorInput(entry);
+    await flushPendingOpenclawOperatorResize(entry);
+  } catch {
+    entry.attachInFlight = '';
+    entry.sessionAttached = false;
+  }
+}
+
+function markOpenclawSessionExited(entry, exitCode) {
+  if (!entry) return;
+  if (entry.exitHandled === true) return;
+  entry.exitHandled = true;
+  const normalizedCode = Number.isInteger(exitCode) ? exitCode : 0;
+  const toolCallId = trimToString(entry.toolCallId);
+  if (entry.mode === 'session') {
+    if (entry.sessionId && gateway.connected && gatewayTerminalSessionsEnabled) {
+      void gateway.send('terminal.session.detach', { sessionId: entry.sessionId }).catch(() => {});
+    }
+    appendOpenclawOutput(entry, `\r\n[Process exited with code ${normalizedCode}]\r\n`);
+  } else {
+    appendOpenclawOutput(entry, `\r\n[Process exited with code ${normalizedCode}]\r\n`);
+  }
+  clearOpenclawSessionBindingTimeout(toolCallId);
+  pendingOperatorInputsByToolCallId.delete(toolCallId);
+  pendingOperatorResizeByToolCallId.delete(toolCallId);
+  openclawToolTabsByToolCallId.delete(toolCallId);
+  if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+  if (typeof entry.tab.markExited === 'function') entry.tab.markExited(normalizedCode);
+}
+
 function registerOpenclawSession(entry, sessionId) {
   const normalized = trimToString(sessionId);
-  if (!normalized) return;
-  if (entry.sessionId === normalized) return;
+  if (!entry || !normalized) return;
+  if (entry.sessionId === normalized) {
+    if (entry.mode === 'session' && entry.sessionAttached !== true) {
+      void attachOpenclawTerminalSession(entry, normalized);
+    }
+    return;
+  }
   clearOpenclawSessionBindingTimeout(entry.toolCallId);
+  if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
   entry.sessionId = normalized;
   entry.tab.terminalSessionId = normalized;
+  if (typeof entry.tab.setTerminalSessionId === 'function') {
+    entry.tab.setTerminalSessionId(normalized);
+  }
   openclawToolTabsBySessionId.set(normalized, entry);
+  if (entry.mode === 'session') {
+    void attachOpenclawTerminalSession(entry, normalized);
+    return;
+  }
   const pending = pendingProcessInputsBySessionId.get(normalized);
   if (pending && pending.length > 0) {
     pending.forEach((text) => appendOpenclawInput(entry, text));
@@ -880,12 +1040,22 @@ async function handleOpenclawExecToolEvent(phase, data) {
     const parsed = parseCommandStringWithArgs(commandText);
     const command = trimToString(parsed.command || commandText);
     const commandArgs = parseCommandArgs(parsed.args);
+    const mode = gatewayTerminalSessionsEnabled ? 'session' : 'legacy';
+    let entryRef = null;
     try {
       const tab = await addAgentTab(command || 'shell', {
         projectId: project.id,
         command,
         commandArgs,
         virtual: true,
+        onVirtualInput: (input) => {
+          if (!entryRef) return;
+          queueOpenclawOperatorInput(entryRef, input);
+        },
+        onVirtualResize: (cols, rows) => {
+          if (!entryRef) return;
+          queueOpenclawOperatorResize(entryRef, cols, rows);
+        },
       });
       const entry = {
         toolCallId,
@@ -893,13 +1063,18 @@ async function handleOpenclawExecToolEvent(phase, data) {
         projectId: project.id,
         tab,
         sessionId: '',
+        mode,
+        sessionAttached: false,
+        attachInFlight: '',
         lastTail: '',
         hasOutput: false,
+        exitHandled: false,
         interactive: commandLooksInteractive(commandText),
         startedAt: Date.now(),
       };
+      entryRef = entry;
       openclawToolTabsByToolCallId.set(toolCallId, entry);
-      appendOpenclawInput(entry, `${commandText}\n`);
+      if (mode === 'legacy') appendOpenclawInput(entry, `${commandText}\n`);
       scheduleOpenclawSessionBindingTimeout(entry, commandText);
     } catch {
       // no-op: terminal creation errors surface in UI
@@ -915,6 +1090,7 @@ async function handleOpenclawExecToolEvent(phase, data) {
     const details = extractToolResultDetails(partialResult);
     const sessionId = trimToString(details.sessionId);
     if (sessionId) registerOpenclawSession(entry, sessionId);
+    if (entry.mode === 'session') return;
     const tail = typeof details.tail === 'string' ? details.tail : '';
     const text = resolveOpenclawTailText(details, tail) || resolveOpenclawTailText(details, extractToolResultText(partialResult));
     if (text) appendOpenclawTail(entry, text);
@@ -926,12 +1102,28 @@ async function handleOpenclawExecToolEvent(phase, data) {
     const details = extractToolResultDetails(result);
     const sessionId = trimToString(details.sessionId);
     if (sessionId) registerOpenclawSession(entry, sessionId);
+    const status = trimToString(details.status).toLowerCase();
+
+    if (entry.mode === 'session') {
+      if (status === 'approval-pending') {
+        const command = trimToString(details.command);
+        const message = command
+          ? `\r\n[Approval required to run: ${command}]\r\n`
+          : '\r\n[Approval required to run command]\r\n';
+        appendOpenclawOutput(entry, message);
+      }
+      if ((status === 'completed' || status === 'failed' || status === 'killed') && entry.exitHandled !== true) {
+        const exitCode = Number.isInteger(details.exitCode) ? details.exitCode : 0;
+        markOpenclawSessionExited(entry, exitCode);
+      }
+      return;
+    }
+
     if (!entry.hasOutput) {
       const text = resolveOpenclawTailText(details, extractToolResultText(result));
       if (text) appendOpenclawOutput(entry, text);
     }
 
-    const status = trimToString(details.status).toLowerCase();
     if (status === 'approval-pending') {
       const command = trimToString(details.command);
       const message = command
@@ -943,14 +1135,7 @@ async function handleOpenclawExecToolEvent(phase, data) {
 
     if (status === 'completed' || status === 'failed') {
       const exitCode = Number.isInteger(details.exitCode) ? details.exitCode : null;
-      const exitLabel = exitCode === null ? 'unknown' : String(exitCode);
-      appendOpenclawOutput(entry, `\r\n[Process exited with code ${exitLabel}]\r\n`);
-      clearOpenclawSessionBindingTimeout(toolCallId);
-      if (typeof entry.tab.markExited === 'function') {
-        entry.tab.markExited(exitCode ?? 0);
-      }
-      openclawToolTabsByToolCallId.delete(toolCallId);
-      if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+      markOpenclawSessionExited(entry, exitCode ?? 0);
     }
   }
 }
@@ -966,12 +1151,53 @@ function handleOpenclawProcessToolEvent(phase, data) {
   if (!normalized) return;
   const entry = resolveOpenclawTabEntryBySessionId(sessionId) || tryBackfillOpenclawSessionFromProcessEvent(sessionId);
   if (entry) {
-    appendOpenclawInput(entry, normalized);
+    if (entry.mode !== 'session') appendOpenclawInput(entry, normalized);
     return;
   }
   const pending = pendingProcessInputsBySessionId.get(sessionId) || [];
   pending.push(normalized);
   pendingProcessInputsBySessionId.set(sessionId, pending);
+}
+
+function resolveOpenclawSessionEntry(sessionId) {
+  const normalized = trimToString(sessionId);
+  if (!normalized) return null;
+  return resolveOpenclawTabEntryBySessionId(normalized) || tryBackfillOpenclawSessionFromProcessEvent(normalized);
+}
+
+function handleOpenclawTerminalSessionOutput(payload) {
+  const sessionId = trimToString(payload?.sessionId || payload?.terminalSessionId);
+  const data = typeof payload?.data === 'string' ? payload.data : '';
+  if (!sessionId || !data) return;
+  const entry = resolveOpenclawSessionEntry(sessionId);
+  if (!entry) return;
+  if (entry.mode === 'session') {
+    if (!entry.sessionId) registerOpenclawSession(entry, sessionId);
+    if (entry.sessionAttached !== true) entry.sessionAttached = true;
+    appendOpenclawOutput(entry, data);
+    return;
+  }
+  appendOpenclawOutput(entry, data);
+}
+
+function handleOpenclawTerminalSessionInput(payload) {
+  const sessionId = trimToString(payload?.sessionId || payload?.terminalSessionId);
+  if (!sessionId) return;
+  const entry = resolveOpenclawSessionEntry(sessionId);
+  if (!entry || entry.mode !== 'session') return;
+  if (entry.sessionAttached !== true) entry.sessionAttached = true;
+}
+
+function handleOpenclawTerminalSessionExit(payload) {
+  const sessionId = trimToString(payload?.sessionId || payload?.terminalSessionId);
+  if (!sessionId) return;
+  const entry = resolveOpenclawSessionEntry(sessionId);
+  if (!entry) return;
+  const status = trimToString(payload?.status).toLowerCase();
+  const exitCode = Number.isInteger(payload?.exitCode)
+    ? payload.exitCode
+    : (status === 'failed' || status === 'killed' ? 1 : 0);
+  markOpenclawSessionExited(entry, exitCode);
 }
 
 function handleGatewayAgentEvent(frame) {
@@ -996,6 +1222,18 @@ function handleGatewayEventFrame(frame) {
   if (!frame || typeof frame !== 'object') return;
   if (frame.event === 'agent') {
     handleGatewayAgentEvent(frame);
+    return;
+  }
+  if (frame.event === 'terminal.session.output') {
+    handleOpenclawTerminalSessionOutput(frame.payload);
+    return;
+  }
+  if (frame.event === 'terminal.session.input') {
+    handleOpenclawTerminalSessionInput(frame.payload);
+    return;
+  }
+  if (frame.event === 'terminal.session.exit') {
+    handleOpenclawTerminalSessionExit(frame.payload);
     return;
   }
   if (frame.event === 'terminal.request.start') {
@@ -1027,6 +1265,10 @@ function installChatE2EBridge() {
       handleGatewayEventFrame(frame);
       return true;
     },
+    setTerminalSessionSupport(enabled) {
+      gatewayTerminalSessionsEnabled = enabled === true;
+      return gatewayTerminalSessionsEnabled;
+    },
   };
 }
 export function configureChat({ updateOpenClawBadge }) { configureChatMessages({ updateOpenClawBadge }); }
@@ -1056,6 +1298,26 @@ function applyGatewaySessionDefaults(helloPayload) {
     ? defaults.mainKey.trim()
     : DEFAULT_MAIN_SESSION_KEY;
   gatewayDefaultAgentId = typeof defaults?.defaultAgentId === 'string' ? defaults.defaultAgentId.trim() : '';
+}
+
+function hasGatewayFeature(list, value) {
+  return Array.isArray(list) && list.includes(value);
+}
+
+function resolveGatewayTerminalSessionSupport(helloPayload) {
+  const methods = helloPayload?.features?.methods;
+  const events = helloPayload?.features?.events;
+  const requiredMethods = [
+    'terminal.session.attach',
+    'terminal.session.write',
+    'terminal.session.resize',
+  ];
+  const requiredEvents = [
+    'terminal.session.output',
+    'terminal.session.exit',
+  ];
+  return requiredMethods.every((method) => hasGatewayFeature(methods, method))
+    && requiredEvents.every((eventName) => hasGatewayFeature(events, eventName));
 }
 function normalizeAssistantMessage(message, options = {}) {
   if (!message || typeof message !== 'object') return null;
@@ -1722,6 +1984,7 @@ export function initChat() {
   gateway.on('event', handleGatewayEventFrame);
   gateway.on('connected', (helloPayload) => {
     applyGatewaySessionDefaults(helloPayload);
+    gatewayTerminalSessionsEnabled = resolveGatewayTerminalSessionSupport(helloPayload);
     gatewayToolEventsEnabled = true;
     gatewayOnline = true;
     renderChatHeaderStatus();
@@ -1730,11 +1993,13 @@ export function initChat() {
   gateway.on('disconnected', () => {
     gatewayOnline = false;
     gatewayToolEventsEnabled = false;
+    gatewayTerminalSessionsEnabled = false;
     resetStreamingState();
   });
   gateway.on('error', () => {
     gatewayOnline = false;
     gatewayToolEventsEnabled = false;
+    gatewayTerminalSessionsEnabled = false;
     resetStreamingState();
   });
 
