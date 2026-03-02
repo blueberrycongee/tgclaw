@@ -1511,8 +1511,15 @@ export function initChat() {
   document.getElementById('chat-send')?.addEventListener('click', sendChat);
   document.getElementById('chat-stop')?.addEventListener('click', abortChat);
   chatInput.addEventListener('input', resizeChatInput);
+  let isComposingInput = false;
+  chatInput.addEventListener('compositionstart', () => {
+    isComposingInput = true;
+  });
+  chatInput.addEventListener('compositionend', () => {
+    isComposingInput = false;
+  });
   chatInput.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && !isComposingInput) {
       event.preventDefault();
       sendChat();
     }
