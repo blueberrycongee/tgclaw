@@ -325,6 +325,15 @@ async function main() {
           },
         },
         {
+          event: 'terminal.session.input',
+          payload: {
+            sessionId,
+            data: 'agent-input-marker\r',
+            actor: 'agent',
+            ts: Date.now(),
+          },
+        },
+        {
           event: 'terminal.session.output',
           payload: {
             sessionId,
@@ -458,6 +467,7 @@ async function main() {
       hasProcessExitMarker: tabText.includes('Process exited with code 143') || tabText.includes('[Process exited with code 143]'),
       hasSubmitProbeEcho: tabText.includes(submitProbe),
       hasTerminalSessionOutput: tabText.includes('Welcome to Opus 4.6'),
+      hasTerminalSessionInput: tabText.includes('agent-input-marker'),
       hasCommandStillRunningText: tabText.includes('Command still running'),
     };
     report.markers = markers;
@@ -472,6 +482,9 @@ async function main() {
     } else if (scenario === 'terminal-session') {
       if (!markers.hasTerminalSessionOutput) {
         throw new Error('Terminal-session replay did not stream expected output to tab.');
+      }
+      if (!markers.hasTerminalSessionInput) {
+        throw new Error('Terminal-session replay did not render expected input echo to tab.');
       }
       if (markers.hasCommandStillRunningText) {
         throw new Error('Terminal-session replay leaked exec wrapper text into tab.');

@@ -1186,6 +1186,16 @@ function handleOpenclawTerminalSessionInput(payload) {
   const entry = resolveOpenclawSessionEntry(sessionId);
   if (!entry || entry.mode !== 'session') return;
   if (entry.sessionAttached !== true) entry.sessionAttached = true;
+  const data = typeof payload?.data === 'string' ? payload.data : '';
+  if (!data) return;
+  const actor = trimToString(payload?.actor).toLowerCase();
+  if (actor === 'operator') return;
+  const hasVisibleChars = /[^\r\n\t ]/.test(data);
+  if (!hasVisibleChars) return;
+  const renderData = actor === 'agent' && /\r$/.test(data) && !/\n/.test(data)
+    ? `${data}\n`
+    : data;
+  appendOpenclawInput(entry, renderData);
 }
 
 function handleOpenclawTerminalSessionExit(payload) {
