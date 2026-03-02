@@ -46,7 +46,12 @@ const capturedExternalExecutionSet = new Set();
 const openclawToolTabsByToolCallId = new Map();
 const openclawToolTabsBySessionId = new Map();
 const pendingProcessInputsBySessionId = new Map();
+const openclawSessionBindingTimeoutsByToolCallId = new Map();
+const OPENCLAW_EXEC_SESSION_BIND_TIMEOUT_MS = window.tgclaw?.isE2E ? 1200 : 6000;
+const OPENCLAW_PROCESS_SESSION_BACKFILL_MAX_AGE_MS = window.tgclaw?.isE2E ? 120000 : 30000;
+const INTERACTIVE_AGENT_COMMANDS = new Set(['claude', 'codex', 'opencode', 'gemini', 'kimi', 'goose', 'aider']);
 let gatewayToolEventsEnabled = false;
+let openclawToolPayloadCompatWarned = false;
 
 function trimToString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -112,6 +117,112 @@ function normalizeTerminalLineEndings(value) {
   return value.replace(/\r?\n/g, '\r\n');
 }
 
+function countMatches(value, pattern) {
+  if (typeof value !== 'string' || !value) return 0;
+  const matches = value.match(pattern);
+  return Array.isArray(matches) ? matches.length : 0;
+}
+
+function looksLikeStrippedAnsiTail(value) {
+  if (typeof value !== 'string' || !value) return false;
+  if (value.includes('\x1b')) return false;
+  const csiCount = countMatches(value, /\[(?:\?[\d;]*|[\d;]*)(?:[@-~])/g);
+  const oscCount = countMatches(value, /\](?:0|1|2|9);[^\r\n]*/g);
+  const markerCount = csiCount + oscCount;
+  if (markerCount < 6) return false;
+  if (/\[\?2004[hl]|\[\?2026[hl]|\[38;5;|\[[0-9]+[ABCDHFGJKmsu]/.test(value)) return true;
+  return markerCount >= 12;
+}
+
+function stripStrippedAnsiTail(value) {
+  if (typeof value !== 'string' || !value) return '';
+  return value
+    // Preserve right-cursor moves as visible spacing for stripped tails.
+    .replace(/\[(\d{1,3})C/g, (_match, rawCount) => ' '.repeat(Math.min(Number(rawCount) || 1, 32)))
+    .replace(/\](?:0|1|2|9);[^\r\n]*/g, '')
+    .replace(/\[(?:\?[\d;]*|[\d;]*)(?:[@-~])/g, '')
+    .replace(/\[<u/g, '')
+    .replace(/\r{3,}/g, '\r\r')
+    .replace(/[ \t]{2,}/g, ' ');
+}
+
+function resolveOpenclawTailText(details, fallbackText) {
+  const rawTail = typeof details?.rawTail === 'string' ? details.rawTail : '';
+  if (rawTail) return rawTail;
+  const tail = typeof fallbackText === 'string' ? fallbackText : '';
+  if (!tail) return '';
+  if (!looksLikeStrippedAnsiTail(tail)) return tail;
+  return stripStrippedAnsiTail(tail);
+}
+
+function toCtrlChar(char) {
+  if (typeof char !== 'string' || char.length !== 1) return '';
+  if (char === '?') return '\x7f';
+  const code = char.toUpperCase().charCodeAt(0);
+  if (code >= 64 && code <= 95) return String.fromCharCode(code & 0x1f);
+  return '';
+}
+
+function decodeHexByte(raw) {
+  const token = trimToString(raw).toLowerCase();
+  if (!token) return '';
+  const normalized = token.startsWith('0x') ? token.slice(2) : token;
+  if (!/^[0-9a-f]{1,2}$/.test(normalized)) return '';
+  const byte = Number.parseInt(normalized, 16);
+  if (!Number.isInteger(byte) || byte < 0 || byte > 0xff) return '';
+  return String.fromCharCode(byte);
+}
+
+function decodeSendKeysToken(rawToken) {
+  const token = trimToString(rawToken);
+  if (!token) return '';
+  if (token.length === 2 && token.startsWith('^')) return toCtrlChar(token.slice(1));
+
+  const parts = token.split('-');
+  let base = token;
+  let ctrl = false;
+  let alt = false;
+  let shift = false;
+  if (parts.length > 1) {
+    const mods = parts.slice(0, -1).map((part) => part.toLowerCase());
+    base = parts[parts.length - 1];
+    ctrl = mods.includes('c');
+    alt = mods.includes('m');
+    shift = mods.includes('s');
+  }
+
+  const key = trimToString(base).toLowerCase();
+  let output = '';
+  if (key === 'enter' || key === 'return') output = '\r';
+  else if (key === 'tab') output = shift ? '\x1b[Z' : '\t';
+  else if (key === 'space') output = ' ';
+  else if (key === 'escape' || key === 'esc') output = '\x1b';
+  else if (key === 'bspace' || key === 'backspace') output = '\x7f';
+  else if (key.length === 1) {
+    output = shift && /[a-z]/.test(key) ? key.toUpperCase() : key;
+    if (ctrl) output = toCtrlChar(output) || output;
+  } else {
+    output = '';
+  }
+
+  if (!output) return '';
+  if (alt) return `\x1b${output}`;
+  return output;
+}
+
+function resolveSendKeysInput(args) {
+  if (!args || typeof args !== 'object') return '';
+  let output = '';
+  if (typeof args.literal === 'string') output += args.literal;
+  if (Array.isArray(args.hex)) {
+    output += args.hex.map((item) => decodeHexByte(item)).join('');
+  }
+  if (Array.isArray(args.keys)) {
+    output += args.keys.map((item) => decodeSendKeysToken(item)).join('');
+  }
+  return output;
+}
+
 function extractToolResultText(result) {
   if (!result || typeof result !== 'object') return '';
   const content = Array.isArray(result.content) ? result.content : [];
@@ -128,6 +239,49 @@ function extractToolResultDetails(result) {
   return details && typeof details === 'object' ? details : {};
 }
 
+function commandLooksInteractive(commandText) {
+  const parsed = parseCommandStringWithArgs(commandText);
+  const command = trimToString(parsed.command || commandText);
+  if (!command) return false;
+  const segments = command.split(/[\\/]/);
+  const binary = segments[segments.length - 1].toLowerCase();
+  return INTERACTIVE_AGENT_COMMANDS.has(binary);
+}
+
+function clearOpenclawSessionBindingTimeout(toolCallId) {
+  if (!toolCallId) return;
+  const handle = openclawSessionBindingTimeoutsByToolCallId.get(toolCallId);
+  if (handle) clearTimeout(handle);
+  openclawSessionBindingTimeoutsByToolCallId.delete(toolCallId);
+}
+
+function emitOpenclawCompatibilityWarning(entry, commandText) {
+  if (!entry || entry.sessionId) return;
+  const warning = '\r\n[Gateway compatibility warning: only exec start event was received.]\r\n'
+    + `[Command: ${trimToString(commandText) || 'unknown'}]\r\n`
+    + '[OpenClaw gateway may be stripping tool payload details (update/result).\r\n'
+    + 'Restart or upgrade the OpenClaw gateway to restore full terminal replay.]\r\n';
+  appendOpenclawOutput(entry, warning);
+  if (!openclawToolPayloadCompatWarned && isChatItemId(state.currentItem)) {
+    appendMessage('OpenClaw gateway appears incompatible: received exec start without follow-up tool details. Please restart/upgrade gateway.', 'from-bot message-error');
+  }
+  openclawToolPayloadCompatWarned = true;
+}
+
+function scheduleOpenclawSessionBindingTimeout(entry, commandText) {
+  if (!entry?.toolCallId) return;
+  clearOpenclawSessionBindingTimeout(entry.toolCallId);
+  if (!commandLooksInteractive(commandText)) return;
+  const handle = setTimeout(() => {
+    const current = resolveOpenclawTabEntryByToolCallId(entry.toolCallId);
+    if (!current) return;
+    if (current.sessionId) return;
+    emitOpenclawCompatibilityWarning(current, commandText);
+    clearOpenclawSessionBindingTimeout(entry.toolCallId);
+  }, OPENCLAW_EXEC_SESSION_BIND_TIMEOUT_MS);
+  openclawSessionBindingTimeoutsByToolCallId.set(entry.toolCallId, handle);
+}
+
 function resolveOpenclawTabEntryByToolCallId(toolCallId) {
   if (!toolCallId) return null;
   const entry = openclawToolTabsByToolCallId.get(toolCallId);
@@ -135,6 +289,7 @@ function resolveOpenclawTabEntryByToolCallId(toolCallId) {
   const tabs = state.tabs[entry.projectId] || [];
   const stillOpen = tabs.some((tab) => tab.id === entry.tabId);
   if (stillOpen) return entry;
+  clearOpenclawSessionBindingTimeout(toolCallId);
   openclawToolTabsByToolCallId.delete(toolCallId);
   if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
   return null;
@@ -148,8 +303,27 @@ function resolveOpenclawTabEntryBySessionId(sessionId) {
   const stillOpen = tabs.some((tab) => tab.id === entry.tabId);
   if (stillOpen) return entry;
   openclawToolTabsBySessionId.delete(sessionId);
+  clearOpenclawSessionBindingTimeout(entry.toolCallId);
   openclawToolTabsByToolCallId.delete(entry.toolCallId);
   return null;
+}
+
+function tryBackfillOpenclawSessionFromProcessEvent(sessionId) {
+  if (!sessionId) return null;
+  const now = Date.now();
+  const candidates = [];
+  for (const toolCallId of openclawToolTabsByToolCallId.keys()) {
+    const entry = resolveOpenclawTabEntryByToolCallId(toolCallId);
+    if (!entry) continue;
+    if (entry.sessionId) continue;
+    if (entry.interactive !== true) continue;
+    if (Number.isFinite(entry.startedAt) && now - entry.startedAt > OPENCLAW_PROCESS_SESSION_BACKFILL_MAX_AGE_MS) continue;
+    candidates.push(entry);
+    if (candidates.length > 1) return null;
+  }
+  if (candidates.length !== 1) return null;
+  registerOpenclawSession(candidates[0], sessionId);
+  return candidates[0];
 }
 
 function appendOpenclawOutput(entry, text) {
@@ -187,12 +361,24 @@ function appendOpenclawTail(entry, tailText) {
     entry.lastTail = normalized;
     return;
   }
+  if (normalized === entry.lastTail) return;
   if (normalized.startsWith(entry.lastTail)) {
-    const delta = normalized.slice(entry.lastTail.length);
-    appendOpenclawOutput(entry, delta);
-  } else if (!entry.lastTail.endsWith(normalized)) {
-    appendOpenclawOutput(entry, `\r\n${normalized}`);
+    appendOpenclawOutput(entry, normalized.slice(entry.lastTail.length));
+    entry.lastTail = normalized;
+    return;
   }
+  if (entry.lastTail.endsWith(normalized)) {
+    entry.lastTail = normalized;
+    return;
+  }
+  const maxOverlap = Math.min(entry.lastTail.length, normalized.length);
+  for (let overlap = maxOverlap; overlap > 0; overlap -= 1) {
+    if (entry.lastTail.slice(entry.lastTail.length - overlap) !== normalized.slice(0, overlap)) continue;
+    appendOpenclawOutput(entry, normalized.slice(overlap));
+    entry.lastTail = normalized;
+    return;
+  }
+  appendOpenclawOutput(entry, `\r\n${normalized}`);
   entry.lastTail = normalized;
 }
 
@@ -648,6 +834,7 @@ function registerOpenclawSession(entry, sessionId) {
   const normalized = trimToString(sessionId);
   if (!normalized) return;
   if (entry.sessionId === normalized) return;
+  clearOpenclawSessionBindingTimeout(entry.toolCallId);
   entry.sessionId = normalized;
   entry.tab.terminalSessionId = normalized;
   openclawToolTabsBySessionId.set(normalized, entry);
@@ -663,8 +850,11 @@ function resolveProcessInputFromArgs(args) {
   const action = trimToString(args.action).toLowerCase();
   if (action === 'write') return typeof args.data === 'string' ? args.data : '';
   if (action === 'paste') return typeof args.text === 'string' ? args.text : '';
-  if (action === 'submit') return '\r';
-  if (action === 'send-keys') return typeof args.literal === 'string' ? args.literal : '';
+  if (action === 'submit') {
+    const data = typeof args.data === 'string' ? args.data : '';
+    return `${data}\r`;
+  }
+  if (action === 'send-keys') return resolveSendKeysInput(args);
   return '';
 }
 
@@ -705,9 +895,12 @@ async function handleOpenclawExecToolEvent(phase, data) {
         sessionId: '',
         lastTail: '',
         hasOutput: false,
+        interactive: commandLooksInteractive(commandText),
+        startedAt: Date.now(),
       };
       openclawToolTabsByToolCallId.set(toolCallId, entry);
       appendOpenclawInput(entry, `${commandText}\n`);
+      scheduleOpenclawSessionBindingTimeout(entry, commandText);
     } catch {
       // no-op: terminal creation errors surface in UI
     }
@@ -723,7 +916,7 @@ async function handleOpenclawExecToolEvent(phase, data) {
     const sessionId = trimToString(details.sessionId);
     if (sessionId) registerOpenclawSession(entry, sessionId);
     const tail = typeof details.tail === 'string' ? details.tail : '';
-    const text = tail || extractToolResultText(partialResult);
+    const text = resolveOpenclawTailText(details, tail) || resolveOpenclawTailText(details, extractToolResultText(partialResult));
     if (text) appendOpenclawTail(entry, text);
     return;
   }
@@ -734,7 +927,7 @@ async function handleOpenclawExecToolEvent(phase, data) {
     const sessionId = trimToString(details.sessionId);
     if (sessionId) registerOpenclawSession(entry, sessionId);
     if (!entry.hasOutput) {
-      const text = extractToolResultText(result);
+      const text = resolveOpenclawTailText(details, extractToolResultText(result));
       if (text) appendOpenclawOutput(entry, text);
     }
 
@@ -752,6 +945,7 @@ async function handleOpenclawExecToolEvent(phase, data) {
       const exitCode = Number.isInteger(details.exitCode) ? details.exitCode : null;
       const exitLabel = exitCode === null ? 'unknown' : String(exitCode);
       appendOpenclawOutput(entry, `\r\n[Process exited with code ${exitLabel}]\r\n`);
+      clearOpenclawSessionBindingTimeout(toolCallId);
       if (typeof entry.tab.markExited === 'function') {
         entry.tab.markExited(exitCode ?? 0);
       }
@@ -770,7 +964,7 @@ function handleOpenclawProcessToolEvent(phase, data) {
   if (!input) return;
   const normalized = normalizeTerminalLineEndings(input);
   if (!normalized) return;
-  const entry = resolveOpenclawTabEntryBySessionId(sessionId);
+  const entry = resolveOpenclawTabEntryBySessionId(sessionId) || tryBackfillOpenclawSessionFromProcessEvent(sessionId);
   if (entry) {
     appendOpenclawInput(entry, normalized);
     return;
