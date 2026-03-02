@@ -43,7 +43,11 @@ export function stripDowngradedToolCallText(text: string): string {
   if (!text) {
     return text;
   }
-  if (!/\[Tool (?:Call|Result)/i.test(text) && !/\[Historical context/i.test(text)) {
+  if (
+    !/\[Tool (?:Call|Result)/i.test(text) &&
+    !/\[Historical context/i.test(text) &&
+    !/assistant\s+to=functions\./i.test(text)
+  ) {
     return text;
   }
 
@@ -186,6 +190,87 @@ export function stripDowngradedToolCallText(text: string): string {
     return result;
   };
 
+  const stripAssistantFunctionToolCalls = (input: string): string => {
+    const markerRe = /assistant\s+to=functions\.[A-Za-z0-9_]+/gi;
+    let result = "";
+    let cursor = 0;
+    for (const match of input.matchAll(markerRe)) {
+      const start = match.index ?? 0;
+      if (start < cursor) {
+        continue;
+      }
+      result += input.slice(cursor, start);
+      let index = start + match[0].length;
+
+      // Drop the marker line (including non-English noise that often follows it).
+      while (index < input.length && input[index] !== "\n" && input[index] !== "\r") {
+        index += 1;
+      }
+      if (input[index] === "\r") {
+        index += 1;
+        if (input[index] === "\n") {
+          index += 1;
+        }
+      } else if (input[index] === "\n") {
+        index += 1;
+      }
+
+      let probe = index;
+      while (probe < input.length && (input[probe] === " " || input[probe] === "\t")) {
+        probe += 1;
+      }
+
+      // Optional fenced wrapper before JSON payload.
+      if (input.slice(probe, probe + 3) === "```") {
+        probe += 3;
+        while (probe < input.length && input[probe] !== "\n" && input[probe] !== "\r") {
+          probe += 1;
+        }
+        if (input[probe] === "\r") {
+          probe += 1;
+          if (input[probe] === "\n") {
+            probe += 1;
+          }
+        } else if (input[probe] === "\n") {
+          probe += 1;
+        }
+        index = probe;
+      }
+
+      const jsonEnd = consumeJsonish(input, index, { allowLeadingNewlines: true });
+      if (jsonEnd !== null) {
+        index = jsonEnd;
+        while (
+          index < input.length &&
+          (input[index] === " " ||
+            input[index] === "\t" ||
+            input[index] === "\n" ||
+            input[index] === "\r")
+        ) {
+          index += 1;
+        }
+        if (input.slice(index, index + 3) === "```") {
+          index += 3;
+          while (index < input.length && input[index] !== "\n" && input[index] !== "\r") {
+            index += 1;
+          }
+        }
+        if (input[index] === "\r") {
+          index += 1;
+          if (input[index] === "\n") {
+            index += 1;
+          }
+        } else if (input[index] === "\n") {
+          index += 1;
+        }
+      }
+
+      cursor = index;
+    }
+    result += input.slice(cursor);
+    return result;
+  };
+
   // Remove [Tool Call: name (ID: ...)] blocks and their Arguments.
   let cleaned = stripToolCalls(text);
 
@@ -194,6 +279,10 @@ export function stripDowngradedToolCallText(text: string): string {
 
   // Remove [Historical context: ...] markers (self-contained within brackets).
   cleaned = cleaned.replace(/\[Historical context:[^\]]*\]\n?/gi, "");
+
+  // Remove leaked textual tool-call stubs emitted by some providers:
+  // `assistant to=functions.<tool> ... { ...json args... }`
+  cleaned = stripAssistantFunctionToolCalls(cleaned);
 
   return cleaned.trim();
 }

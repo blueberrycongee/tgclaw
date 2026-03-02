@@ -537,6 +537,16 @@ describe("stripDowngradedToolCallText", () => {
         expected: "Intro.",
       },
       {
+        name: "assistant-to-functions leaked marker with json payload",
+        text: `**Polling latest output** assistant to=functions.process մեկնաբանություն\n{"action":"poll","sessionId":"sharp-shell","timeout":8000}`,
+        expected: "**Polling latest output**",
+      },
+      {
+        name: "assistant-to-functions fenced json block",
+        text: `Before\nassistant to=functions.process\n\`\`\`json\n{"action":"poll","sessionId":"sharp-shell"}\n\`\`\`\nAfter`,
+        expected: "Before\nAfter",
+      },
+      {
         name: "no markers",
         text: "Just a normal response with no markers.",
         expected: "Just a normal response with no markers.",
