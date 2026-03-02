@@ -119,6 +119,13 @@ export function findReusableInteractiveExecSession(params: {
   return matches[0] ?? null;
 }
 
+export function isInteractiveReuseEligible(params: {
+  allowBackground: boolean;
+  yieldWindow: number | null;
+}): boolean {
+  return params.allowBackground && params.yieldWindow !== null;
+}
+
 function extractScriptTargetFromCommand(
   command: string,
 ): { kind: "python"; relOrAbsPath: string } | { kind: "node"; relOrAbsPath: string } | null {
@@ -530,13 +537,17 @@ export function createExecTool(
         : (explicitTimeoutSec ?? defaultTimeoutSec);
       const getWarningText = () => (warnings.length ? `${warnings.join("\n")}\n\n` : "");
       const usePty = params.pty === true && !sandbox;
+      const interactiveReuseEligible = isInteractiveReuseEligible({
+        allowBackground,
+        yieldWindow,
+      });
       const reusableSession = findReusableInteractiveExecSession({
         sessions: listRunningSessions(),
         command: params.command,
         workdir,
         scopeKey: defaults?.scopeKey,
         usePty,
-        backgroundEligible: allowBackground && (backgroundRequested || yieldRequested),
+        backgroundEligible: interactiveReuseEligible,
       });
       if (reusableSession) {
         return {

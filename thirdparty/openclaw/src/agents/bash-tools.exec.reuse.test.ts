@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { findReusableInteractiveExecSession } from "./bash-tools.exec.js";
+import {
+  findReusableInteractiveExecSession,
+  isInteractiveReuseEligible,
+} from "./bash-tools.exec.js";
 
 const BASE_SESSION = {
   id: "session-a",
@@ -35,6 +38,13 @@ test("returns null when pty/background eligibility is missing", () => {
       backgroundEligible: false,
     }),
   ).toBeNull();
+});
+
+test("treats default-yield background continuation as reuse eligible", () => {
+  expect(isInteractiveReuseEligible({ allowBackground: true, yieldWindow: 10_000 })).toBe(true);
+  expect(isInteractiveReuseEligible({ allowBackground: true, yieldWindow: 0 })).toBe(true);
+  expect(isInteractiveReuseEligible({ allowBackground: false, yieldWindow: 10_000 })).toBe(false);
+  expect(isInteractiveReuseEligible({ allowBackground: true, yieldWindow: null })).toBe(false);
 });
 
 test("finds newest running interactive session for same command/cwd/scope", () => {

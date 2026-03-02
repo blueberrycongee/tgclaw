@@ -175,7 +175,7 @@ Repeated agent requests to start interactive coding CLIs (for example `claude`) 
 Added guarded reuse logic in `exec`:
 - Applies only when all conditions match:
   - PTY mode
-  - background/yield continuation requested
+  - background continuation enabled (explicit `background`/`yieldMs` or default yield window)
   - command is a known interactive CLI (`claude`, `codex`, `opencode`)
   - same `cwd`
   - same `scopeKey`
