@@ -10,6 +10,7 @@
     "e2e:openclaw:replay": "node scripts/e2e/openclaw-full-e2e.js --mode replay",
     "e2e:openclaw:ansi-repro": "node scripts/e2e/openclaw-ansi-repro.js",
     "e2e:openclaw:compat": "node scripts/e2e/openclaw-ansi-repro.js --scenario start-only",
+    "e2e:openclaw:terminal-session": "node scripts/e2e/openclaw-ansi-repro.js --scenario terminal-session",
     "start": "electron .",
     "dev:renderer": "vite -c vite.config.js",
     "dev:electron": "sleep 2 && VITE_DEV_SERVER_URL=http://localhost:5173 electron .",

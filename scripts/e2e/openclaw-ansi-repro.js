@@ -145,6 +145,13 @@ async function emitGatewayEvent(page, frame) {
   );
 }
 
+async function setTerminalSessionSupport(page, enabled) {
+  return await page.evaluate(
+    (value) => window.__TGCLAW_E2E_CHAT__?.setTerminalSessionSupport?.(value) === true,
+    enabled,
+  );
+}
+
 async function getSnapshot(page) {
   return await page.evaluate(() => window.__TGCLAW_E2E__?.snapshot?.() || null);
 }
@@ -191,6 +198,10 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
   const scenario = String(args.scenario || 'ansi-legacy').trim().toLowerCase();
+  const validScenarios = new Set(['ansi-legacy', 'start-only', 'terminal-session']);
+  if (!validScenarios.has(scenario)) {
+    throw new Error(`Unsupported scenario: ${scenario}`);
+  }
   const defaultSessionFile = path.join(
     os.homedir(),
     '.openclaw',
@@ -223,7 +234,7 @@ async function main() {
   let app = null;
   try {
     let tail = '';
-    if (scenario !== 'start-only') {
+    if (scenario === 'ansi-legacy') {
       tail = extractTailFromSessionFile(sessionFile, sessionId);
       report.tailBytes = Buffer.byteLength(tail, 'utf8');
       report.checks.push({ name: 'tail_loaded_from_real_session', passed: true });
@@ -254,6 +265,14 @@ async function main() {
     await page.waitForSelector('#chat-input', { timeout: 30000 });
     await page.screenshot({ path: path.join(screenshotsDir, '01-initial.png') });
     report.checks.push({ name: 'electron_started', passed: true });
+
+    if (scenario === 'terminal-session') {
+      const supportEnabled = await setTerminalSessionSupport(page, true);
+      if (!supportEnabled) {
+        throw new Error('Failed enabling terminal-session support in e2e chat bridge.');
+      }
+      report.checks.push({ name: 'terminal_session_mode_enabled', passed: true });
+    }
 
     await page.click('[data-project-id="proj-a"]');
     await page.click('.sidebar-item.pinned[data-id="openclaw"]');
@@ -294,6 +313,35 @@ async function main() {
           },
         },
       });
+    } else if (scenario === 'terminal-session') {
+      frames.push(
+        {
+          event: 'terminal.session.output',
+          payload: {
+            sessionId,
+            stream: 'stdout',
+            data: `Claude Code v2.1.59\r\nWelcome to Opus 4.6\r\n`,
+            cursor: 64,
+          },
+        },
+        {
+          event: 'terminal.session.output',
+          payload: {
+            sessionId,
+            stream: 'stdout',
+            data: `${repoRoot}\r\n`,
+            cursor: 80,
+          },
+        },
+        {
+          event: 'terminal.session.exit',
+          payload: {
+            sessionId,
+            status: 'completed',
+            exitCode: 0,
+          },
+        },
+      );
     } else {
       frames.push(
         {
@@ -409,6 +457,8 @@ async function main() {
       hasGatewayCompatWarning: /Gateway compatibility warning/i.test(tabText),
       hasProcessExitMarker: tabText.includes('Process exited with code 143') || tabText.includes('[Process exited with code 143]'),
       hasSubmitProbeEcho: tabText.includes(submitProbe),
+      hasTerminalSessionOutput: tabText.includes('Welcome to Opus 4.6'),
+      hasCommandStillRunningText: tabText.includes('Command still running'),
     };
     report.markers = markers;
     report.textPath = textPath;
@@ -418,6 +468,16 @@ async function main() {
     if (scenario === 'start-only') {
       if (!markers.hasSubmitProbeEcho) {
         throw new Error('Start-only legacy stream did not echo submitted process input into virtual tab.');
+      }
+    } else if (scenario === 'terminal-session') {
+      if (!markers.hasTerminalSessionOutput) {
+        throw new Error('Terminal-session replay did not stream expected output to tab.');
+      }
+      if (markers.hasCommandStillRunningText) {
+        throw new Error('Terminal-session replay leaked exec wrapper text into tab.');
+      }
+      if (!tabText.includes('[Process exited with code 0]')) {
+        throw new Error('Terminal-session replay did not mark session exit.');
       }
     } else {
       if (markers.containsLiteralCursorMoves || markers.csiFragmentCount > 12) {
