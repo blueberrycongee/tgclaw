@@ -9,6 +9,7 @@ type PtyDisposable = { dispose: () => void };
 type PtySpawnHandle = {
   pid: number;
   write: (data: string | Buffer) => void;
+  resize?: (cols: number, rows: number) => void;
   onData: (listener: (value: string) => void) => PtyDisposable | void;
   onExit: (listener: (event: PtyExitEvent) => void) => PtyDisposable | void;
   kill: (signal?: string) => void;
@@ -171,6 +172,23 @@ export async function createPtyAdapter(params: {
     }
   };
 
+  const resize = (cols: number, rows: number): boolean => {
+    if (typeof pty.resize !== "function") {
+      return false;
+    }
+    if (!Number.isFinite(cols) || !Number.isFinite(rows)) {
+      return false;
+    }
+    const safeCols = Math.max(1, Math.floor(cols));
+    const safeRows = Math.max(1, Math.floor(rows));
+    try {
+      pty.resize(safeCols, safeRows);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   const dispose = () => {
     try {
       dataListener?.dispose();
@@ -193,6 +211,7 @@ export async function createPtyAdapter(params: {
     stdin,
     onStdout,
     onStderr,
+    resize,
     wait,
     kill,
     dispose,

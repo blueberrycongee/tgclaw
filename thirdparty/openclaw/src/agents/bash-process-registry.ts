@@ -1,4 +1,5 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { publishProcessSessionEvent } from "./process-session-events.js";
 import { createSessionSlug as createSessionSlugId } from "./session-slug.js";
 
 const DEFAULT_JOB_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -49,6 +50,7 @@ export interface ProcessSession {
   tail: string;
   rawAggregated?: string;
   rawTail?: string;
+  outputCursor?: number;
   exitCode?: number | null;
   exitSignal?: NodeJS.Signals | number | null;
   exited: boolean;
@@ -149,10 +151,21 @@ export function markExited(
   exitSignal: NodeJS.Signals | number | null,
   status: ProcessStatus,
 ) {
+  const wasExited = session.exited;
   session.exited = true;
   session.exitCode = exitCode;
   session.exitSignal = exitSignal;
   session.tail = tail(session.aggregated, 2000);
+  if (!wasExited) {
+    publishProcessSessionEvent({
+      type: "exit",
+      sessionId: session.id,
+      status,
+      exitCode,
+      exitSignal,
+      ts: Date.now(),
+    });
+  }
   moveToFinished(session, status);
 }
 

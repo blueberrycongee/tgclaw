@@ -64,6 +64,10 @@ export type GatewayRequestContext = {
     sessionKey?: string,
   ) => { sessionKey: string; clientRunId: string } | undefined;
   registerToolEventRecipient: (runId: string, connId: string) => void;
+  attachTerminalSession?: (connId: string, sessionId: string) => void;
+  detachTerminalSession?: (connId: string, sessionId: string) => void;
+  detachAllTerminalSessionsForConn?: (connId: string) => void;
+  getTerminalSessionRecipients?: (sessionId: string) => ReadonlySet<string> | undefined;
   dedupe: Map<string, DedupeEntry>;
   wizardSessions: Map<string, WizardSession>;
   findRunningWizard: () => string | null;

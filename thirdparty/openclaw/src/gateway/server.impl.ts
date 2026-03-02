@@ -1,6 +1,7 @@
 import path from "node:path";
 import { resolveAgentWorkspaceDir, resolveDefaultAgentId } from "../agents/agent-scope.js";
 import { getActiveEmbeddedRunCount } from "../agents/pi-embedded-runner/runs.js";
+import { subscribeProcessSessionEvents } from "../agents/process-session-events.js";
 import { registerSkillsChangeListener } from "../agents/skills/refresh.js";
 import { initSubagentRegistry } from "../agents/subagent-registry.js";
 import { getTotalPendingReplies } from "../auto-reply/reply/dispatcher-registry.js";
@@ -88,6 +89,7 @@ import { createGatewayRuntimeState } from "./server-runtime-state.js";
 import { resolveSessionKeyForRun } from "./server-session-key.js";
 import { logGatewayStartup } from "./server-startup-log.js";
 import { startGatewaySidecars } from "./server-startup.js";
+import { createTerminalSessionSubscriptionRegistry } from "./server-terminal-sessions.js";
 import { startGatewayTailscaleExposure } from "./server-tailscale.js";
 import { createWizardSessionTracker } from "./server-wizard-sessions.js";
 import { attachGatewayWsHandlers } from "./server-ws-runtime.js";
@@ -535,6 +537,20 @@ export async function startGatewayServer(
     broadcast("voicewake.changed", { triggers }, { dropIfSlow: true });
   };
   const hasMobileNodeConnected = () => hasConnectedMobileNode(nodeRegistry);
+  const terminalSessionSubscriptions = createTerminalSessionSubscriptionRegistry();
+  const terminalSessionEventsUnsub = subscribeProcessSessionEvents((event) => {
+    const recipients = terminalSessionSubscriptions.getRecipients(event.sessionId);
+    if (!recipients || recipients.size === 0) {
+      return;
+    }
+    const eventName =
+      event.type === "output"
+        ? "terminal.session.output"
+        : event.type === "input"
+          ? "terminal.session.input"
+          : "terminal.session.exit";
+    broadcastToConnIds(eventName, event, recipients, { dropIfSlow: true });
+  });
   applyGatewayLaneConcurrency(cfgAtStart);
 
   let cronState = buildGatewayCronService({
@@ -754,6 +770,10 @@ export async function startGatewayServer(
       addChatRun,
       removeChatRun,
       registerToolEventRecipient: toolEventRecipients.add,
+      attachTerminalSession: terminalSessionSubscriptions.attach,
+      detachTerminalSession: terminalSessionSubscriptions.detach,
+      detachAllTerminalSessionsForConn: terminalSessionSubscriptions.detachAllForConn,
+      getTerminalSessionRecipients: terminalSessionSubscriptions.getRecipients,
       dedupe,
       wizardSessions,
       findRunningWizard,
@@ -900,6 +920,7 @@ export async function startGatewayServer(
     dedupeCleanup,
     agentUnsub,
     heartbeatUnsub,
+    terminalSessionEventsUnsub,
     chatRunState,
     clients,
     configReloader,

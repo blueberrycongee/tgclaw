@@ -58,6 +58,17 @@ export function createProcessSupervisor(): ProcessSupervisor {
     }
   };
 
+  const resize = (runId: string, cols: number, rows: number): boolean => {
+    const current = active.get(runId);
+    if (!current) {
+      return false;
+    }
+    if (typeof current.run.resize !== "function") {
+      return false;
+    }
+    return current.run.resize(cols, rows);
+  };
+
   const spawn = async (input: SpawnInput): Promise<ManagedRun> => {
     const runId = input.runId?.trim() || crypto.randomUUID();
     if (input.replaceExistingScope && input.scopeKey?.trim()) {
@@ -247,6 +258,12 @@ export function createProcessSupervisor(): ProcessSupervisor {
         pid: adapter.pid,
         startedAtMs,
         stdin: adapter.stdin,
+        resize: (cols: number, rows: number) => {
+          if (settled || typeof adapter.resize !== "function") {
+            return false;
+          }
+          return adapter.resize(cols, rows);
+        },
         wait: async () => await waitPromise,
         cancel: (reason = "manual-cancel") => {
           requestCancel(reason);
@@ -272,6 +289,7 @@ export function createProcessSupervisor(): ProcessSupervisor {
   return {
     spawn,
     cancel,
+    resize,
     cancelScope,
     reconcileOrphans: async () => {
       // Deliberate no-op: this supervisor uses in-memory ownership only.

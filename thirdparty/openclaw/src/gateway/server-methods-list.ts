@@ -96,6 +96,13 @@ const BASE_METHODS = [
   "chat.history",
   "chat.abort",
   "chat.send",
+  "terminal.session.attach",
+  "terminal.session.detach",
+  "terminal.session.write",
+  "terminal.session.submit",
+  "terminal.session.paste",
+  "terminal.session.sendKeys",
+  "terminal.session.resize",
 ];
 
 export function listGatewayMethods(): string[] {
@@ -122,5 +129,8 @@ export const GATEWAY_EVENTS = [
   "voicewake.changed",
   "exec.approval.requested",
   "exec.approval.resolved",
+  "terminal.session.output",
+  "terminal.session.input",
+  "terminal.session.exit",
   GATEWAY_EVENT_UPDATE_AVAILABLE,
 ];

@@ -17,6 +17,7 @@ import {
 } from "./bash-process-registry.js";
 import { deriveSessionName, pad, sliceLogLines, truncateMiddle } from "./bash-tools.shared.js";
 import { recordCommandPoll, resetCommandPollCount } from "./command-poll-backoff.js";
+import { publishProcessSessionEvent } from "./process-session-events.js";
 import { encodeKeySequence, encodePaste } from "./pty-keys.js";
 
 export type ProcessToolDefaults = {
@@ -69,6 +70,8 @@ const processSchema = Type.Object({
       minimum: 0,
     }),
   ),
+  cols: Type.Optional(Type.Number({ description: "PTY columns for resize" })),
+  rows: Type.Optional(Type.Number({ description: "PTY rows for resize" })),
 });
 
 const MAX_POLL_WAIT_MS = 120_000;
@@ -150,7 +153,7 @@ export function createProcessTool(
     name: "process",
     label: "process",
     description:
-      "Manage running exec sessions: list, poll, log, write, send-keys, submit, paste, kill.",
+      "Manage running exec sessions: list, poll, log, write, send-keys, submit, paste, resize, kill.",
     parameters: processSchema,
     execute: async (_toolCallId, args, _signal, _onUpdate): Promise<AgentToolResult<unknown>> => {
       const params = args as {
@@ -162,6 +165,7 @@ export function createProcessTool(
           | "send-keys"
           | "submit"
           | "paste"
+          | "resize"
           | "kill"
           | "clear"
           | "remove";
@@ -176,6 +180,8 @@ export function createProcessTool(
         offset?: number;
         limit?: number;
         timeout?: unknown;
+        cols?: number;
+        rows?: number;
       };
 
       if (params.action === "list") {
@@ -275,6 +281,23 @@ export function createProcessTool(
               resolve();
             }
           });
+        });
+      };
+
+      const publishProcessInput = (
+        session: ProcessSession,
+        data: string,
+        actor: "agent" | "operator" = "agent",
+      ) => {
+        if (!data) {
+          return;
+        }
+        publishProcessSessionEvent({
+          type: "input",
+          sessionId: session.id,
+          data,
+          actor,
+          ts: Date.now(),
         });
       };
 
@@ -461,6 +484,7 @@ export function createProcessTool(
             return resolved.result;
           }
           await writeToStdin(resolved.stdin, params.data ?? "");
+          publishProcessInput(resolved.session, params.data ?? "");
           if (params.eof) {
             resolved.stdin.end();
           }
@@ -494,6 +518,7 @@ export function createProcessTool(
             };
           }
           await writeToStdin(resolved.stdin, data);
+          publishProcessInput(resolved.session, data);
           return runningSessionResult(
             resolved.session,
             `Sent ${data.length} bytes to session ${params.sessionId}.` +
@@ -507,6 +532,7 @@ export function createProcessTool(
             return resolved.result;
           }
           await writeToStdin(resolved.stdin, "\r");
+          publishProcessInput(resolved.session, "\r");
           return runningSessionResult(
             resolved.session,
             `Submitted session ${params.sessionId} (sent CR).`,
@@ -531,9 +557,34 @@ export function createProcessTool(
             };
           }
           await writeToStdin(resolved.stdin, payload);
+          publishProcessInput(resolved.session, payload);
           return runningSessionResult(
             resolved.session,
             `Pasted ${params.text?.length ?? 0} chars to session ${params.sessionId}.`,
+          );
+        }
+
+        case "resize": {
+          if (!scopedSession) {
+            return failText(`No active session found for ${params.sessionId}`);
+          }
+          if (!scopedSession.backgrounded) {
+            return failText(`Session ${params.sessionId} is not backgrounded.`);
+          }
+          const colsRaw = typeof params.cols === "number" ? params.cols : Number.NaN;
+          const rowsRaw = typeof params.rows === "number" ? params.rows : Number.NaN;
+          const cols = Number.isFinite(colsRaw) ? Math.max(1, Math.floor(colsRaw)) : 0;
+          const rows = Number.isFinite(rowsRaw) ? Math.max(1, Math.floor(rowsRaw)) : 0;
+          if (cols <= 0 || rows <= 0) {
+            return failText("resize requires positive numeric cols and rows.");
+          }
+          const resized = supervisor.resize(scopedSession.id, cols, rows);
+          if (!resized) {
+            return failText(`Session ${params.sessionId} does not support resize.`);
+          }
+          return runningSessionResult(
+            scopedSession,
+            `Resized session ${params.sessionId} to ${cols}x${rows}.`,
           );
         }
 

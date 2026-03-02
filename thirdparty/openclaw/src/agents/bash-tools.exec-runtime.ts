@@ -20,6 +20,7 @@ import {
   markExited,
   tail,
 } from "./bash-process-registry.js";
+import { publishProcessSessionEvent } from "./process-session-events.js";
 import {
   buildDockerExecArgs,
   chunkString,
@@ -316,6 +317,7 @@ export async function runExecProcess(opts: {
     tail: "",
     rawAggregated: "",
     rawTail: "",
+    outputCursor: 0,
     exited: false,
     exitCode: undefined as number | null | undefined,
     exitSignal: undefined as NodeJS.Signals | number | null | undefined,
@@ -353,7 +355,24 @@ export async function runExecProcess(opts: {
     session.rawTail = tail(nextRaw, 2000);
   };
 
+  const emitOutputEvent = (stream: "stdout" | "stderr", chunk: string) => {
+    if (!chunk) {
+      return;
+    }
+    const nextCursor = (session.outputCursor ?? 0) + chunk.length;
+    session.outputCursor = nextCursor;
+    publishProcessSessionEvent({
+      type: "output",
+      sessionId,
+      data: chunk,
+      stream,
+      cursor: nextCursor,
+      ts: Date.now(),
+    });
+  };
+
   const handleStdout = (data: string) => {
+    emitOutputEvent("stdout", data);
     appendRawOutput(data);
     const str = sanitizeBinaryOutput(data.toString());
     for (const chunk of chunkString(str)) {
@@ -363,6 +382,7 @@ export async function runExecProcess(opts: {
   };
 
   const handleStderr = (data: string) => {
+    emitOutputEvent("stderr", data);
     appendRawOutput(data);
     const str = sanitizeBinaryOutput(data.toString());
     for (const chunk of chunkString(str)) {

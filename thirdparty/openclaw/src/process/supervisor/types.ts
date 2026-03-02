@@ -41,6 +41,7 @@ export type ManagedRun = {
   pid?: number;
   startedAtMs: number;
   stdin?: ManagedRunStdin;
+  resize?: (cols: number, rows: number) => boolean;
   wait: () => Promise<RunExit>;
   cancel: (reason?: TerminationReason) => void;
 };
@@ -59,6 +60,7 @@ export type SpawnProcessAdapter<WaitSignal = NodeJS.Signals | number | null> = {
   stdin?: ManagedRunStdin;
   onStdout: (listener: (chunk: string) => void) => void;
   onStderr: (listener: (chunk: string) => void) => void;
+  resize?: (cols: number, rows: number) => boolean;
   wait: () => Promise<{ code: number | null; signal: WaitSignal }>;
   kill: (signal?: NodeJS.Signals) => void;
   dispose: () => void;
@@ -100,6 +102,7 @@ export type SpawnInput = SpawnChildInput | SpawnPtyInput;
 export interface ProcessSupervisor {
   spawn(input: SpawnInput): Promise<ManagedRun>;
   cancel(runId: string, reason?: TerminationReason): void;
+  resize(runId: string, cols: number, rows: number): boolean;
   cancelScope(scopeKey: string, reason?: TerminationReason): void;
   reconcileOrphans(): Promise<void>;
   getRecord(runId: string): RunRecord | undefined;
