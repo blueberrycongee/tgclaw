@@ -76,3 +76,17 @@ test("process submit sends Enter for pty sessions", async () => {
 
   await waitForSessionCompletion({ processTool, sessionId, expectedText: "submitted" });
 });
+
+test("process submit sends provided data before Enter for pty sessions", async () => {
+  const { processTool, sessionId } = await startPtySession(
+    'node -e "const dataEvent=String.fromCharCode(100,97,116,97);const marker=String.fromCharCode(115,117,98,109,105,116,45,100,97,116,97,58);process.stdin.on(dataEvent,d=>{if(d.includes(String.fromCharCode(10))||d.includes(String.fromCharCode(13))){process.stdout.write(marker+d);process.exit(0);}});"',
+  );
+
+  await processTool.execute("toolcall", {
+    action: "submit",
+    sessionId,
+    data: "hello-submit",
+  });
+
+  await waitForSessionCompletion({ processTool, sessionId, expectedText: "submit-data:hello-submit" });
+});

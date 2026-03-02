@@ -531,11 +531,13 @@ export function createProcessTool(
           if (!resolved.ok) {
             return resolved.result;
           }
-          await writeToStdin(resolved.stdin, "\r");
-          publishProcessInput(resolved.session, "\r");
+          const prefix = params.data ?? "";
+          const payload = `${prefix}\r`;
+          await writeToStdin(resolved.stdin, payload);
+          publishProcessInput(resolved.session, payload);
           return runningSessionResult(
             resolved.session,
-            `Submitted session ${params.sessionId} (sent CR).`,
+            `Submitted session ${params.sessionId} (${payload.length} bytes, ending with CR).`,
           );
         }
 
