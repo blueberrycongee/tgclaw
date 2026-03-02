@@ -84,3 +84,53 @@ This cleanly separates:
 #### Notes
 
 `rawTail` is optional and backward-compatible. Consumers that only read `tail` continue to work.
+
+### Patch #3: Add gateway-native terminal session control plane (attach/write/resize/events)
+
+**Files**:
+- `src/agents/process-session-events.ts`
+- `src/agents/bash-tools.exec-runtime.ts`
+- `src/agents/bash-process-registry.ts`
+- `src/agents/bash-tools.process.ts`
+- `src/process/supervisor/types.ts`
+- `src/process/supervisor/supervisor.ts`
+- `src/process/supervisor/adapters/pty.ts`
+- `src/gateway/server-terminal-sessions.ts`
+- `src/gateway/server-methods/terminal-sessions.ts`
+- `src/gateway/server-methods.ts`
+- `src/gateway/server-methods-list.ts`
+- `src/gateway/method-scopes.ts`
+- `src/gateway/server-methods/types.ts`
+- `src/gateway/server/ws-connection.ts`
+- `src/gateway/server.impl.ts`
+- `src/gateway/server-close.ts`
+
+#### Problem
+
+TGClaw previously depended on tool-event replay (`exec`/`process`) to emulate terminal output.
+This caused divergence from real interactive terminal behavior:
+- startup text formatting differed from manual launch
+- command wrapper text could leak into terminal view
+- no real bidirectional operator interaction path to the live OpenClaw PTY session
+
+#### Solution
+
+Added a dedicated terminal-session control plane in OpenClaw gateway:
+
+- New RPC methods:
+  - `terminal.session.attach`
+  - `terminal.session.detach`
+  - `terminal.session.write`
+  - `terminal.session.submit`
+  - `terminal.session.paste`
+  - `terminal.session.sendKeys`
+  - `terminal.session.resize`
+- New events:
+  - `terminal.session.output`
+  - `terminal.session.input`
+  - `terminal.session.exit`
+- Added process-session event bus so exec/process layer can publish live output/input/exit.
+- Added PTY resize support through process supervisor so remote terminals can react to xterm resize.
+- Added per-connection session subscription registry and automatic cleanup on WebSocket disconnect.
+
+This provides a first-class streaming API for terminal consumers while preserving legacy tool-event behavior.
