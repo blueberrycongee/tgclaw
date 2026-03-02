@@ -9,7 +9,7 @@ import {
 } from "../infra/shell-env.js";
 import { logInfo } from "../logger.js";
 import { parseAgentSessionKey, resolveAgentIdFromSessionKey } from "../routing/session-key.js";
-import { markBackgrounded } from "./bash-process-registry.js";
+import { listRunningSessions, markBackgrounded } from "./bash-process-registry.js";
 import { processGatewayAllowlist } from "./bash-tools.exec-host-gateway.js";
 import { executeNodeHostCommand } from "./bash-tools.exec-host-node.js";
 import {
@@ -51,6 +51,73 @@ export type {
   ExecToolDefaults,
   ExecToolDetails,
 } from "./bash-tools.exec-types.js";
+
+type ReusableExecSessionCandidate = {
+  id: string;
+  command: string;
+  cwd?: string;
+  scopeKey?: string;
+  startedAt: number;
+  exited: boolean;
+  pid?: number;
+  tail?: string;
+  rawTail?: string;
+};
+
+const INTERACTIVE_REUSABLE_COMMANDS = new Set(["claude", "codex", "opencode"]);
+
+function normalizeReusableInteractiveCommand(command: string): string | null {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/[|&;<>]/.test(trimmed)) {
+    return null;
+  }
+  const tokens = trimmed.split(/\s+/).filter(Boolean);
+  if (tokens.length !== 1) {
+    return null;
+  }
+  const token = tokens[0].replace(/^['"]|['"]$/g, "");
+  if (!token) {
+    return null;
+  }
+  const base = path.basename(token).toLowerCase();
+  return INTERACTIVE_REUSABLE_COMMANDS.has(base) ? base : null;
+}
+
+export function findReusableInteractiveExecSession(params: {
+  sessions: ReusableExecSessionCandidate[];
+  command: string;
+  workdir: string;
+  scopeKey?: string;
+  usePty: boolean;
+  backgroundEligible: boolean;
+}): ReusableExecSessionCandidate | null {
+  if (!params.usePty || !params.backgroundEligible) {
+    return null;
+  }
+  const commandKey = normalizeReusableInteractiveCommand(params.command);
+  if (!commandKey) {
+    return null;
+  }
+  const targetCwd = path.resolve(params.workdir);
+  const targetScope = params.scopeKey ?? "";
+
+  const matches = params.sessions
+    .filter((session) => !session.exited)
+    .filter((session) => (session.scopeKey ?? "") === targetScope)
+    .filter((session) => {
+      if (!session.cwd) {
+        return false;
+      }
+      return path.resolve(session.cwd) === targetCwd;
+    })
+    .filter((session) => normalizeReusableInteractiveCommand(session.command) === commandKey)
+    .toSorted((left, right) => right.startedAt - left.startedAt);
+
+  return matches[0] ?? null;
+}
 
 function extractScriptTargetFromCommand(
   command: string,
@@ -463,6 +530,35 @@ export function createExecTool(
         : (explicitTimeoutSec ?? defaultTimeoutSec);
       const getWarningText = () => (warnings.length ? `${warnings.join("\n")}\n\n` : "");
       const usePty = params.pty === true && !sandbox;
+      const reusableSession = findReusableInteractiveExecSession({
+        sessions: listRunningSessions(),
+        command: params.command,
+        workdir,
+        scopeKey: defaults?.scopeKey,
+        usePty,
+        backgroundEligible: allowBackground && (backgroundRequested || yieldRequested),
+      });
+      if (reusableSession) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `${getWarningText()}Reusing running session ${reusableSession.id} (pid ${
+                reusableSession.pid ?? "n/a"
+              }). Use process (list/poll/log/write/kill/clear/remove) for follow-up.`,
+            },
+          ],
+          details: {
+            status: "running",
+            sessionId: reusableSession.id,
+            pid: reusableSession.pid ?? undefined,
+            startedAt: reusableSession.startedAt,
+            cwd: reusableSession.cwd,
+            tail: reusableSession.tail,
+            rawTail: reusableSession.rawTail,
+          },
+        };
+      }
 
       // Preflight: catch a common model failure mode (shell syntax leaking into Python/JS sources)
       // before we execute and burn tokens in cron loops.
