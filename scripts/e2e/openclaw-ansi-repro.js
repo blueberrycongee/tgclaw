@@ -198,7 +198,12 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = process.cwd();
   const scenario = String(args.scenario || 'ansi-legacy').trim().toLowerCase();
-  const validScenarios = new Set(['ansi-legacy', 'start-only', 'terminal-session']);
+  const validScenarios = new Set([
+    'ansi-legacy',
+    'start-only',
+    'terminal-session',
+    'terminal-session-race',
+  ]);
   if (!validScenarios.has(scenario)) {
     throw new Error(`Unsupported scenario: ${scenario}`);
   }
@@ -266,7 +271,7 @@ async function main() {
     await page.screenshot({ path: path.join(screenshotsDir, '01-initial.png') });
     report.checks.push({ name: 'electron_started', passed: true });
 
-    if (scenario === 'terminal-session') {
+    if (scenario === 'terminal-session' || scenario === 'terminal-session-race') {
       const supportEnabled = await setTerminalSessionSupport(page, true);
       if (!supportEnabled) {
         throw new Error('Failed enabling terminal-session support in e2e chat bridge.');
@@ -340,6 +345,41 @@ async function main() {
             stream: 'stdout',
             data: `${repoRoot}\r\n`,
             cursor: 80,
+          },
+        },
+        {
+          event: 'terminal.session.exit',
+          payload: {
+            sessionId,
+            status: 'completed',
+            exitCode: 0,
+          },
+        },
+      );
+    } else if (scenario === 'terminal-session-race') {
+      frames.push(
+        {
+          event: 'agent',
+          payload: {
+            stream: 'tool',
+            data: {
+              phase: 'start',
+              name: 'process',
+              args: {
+                action: 'submit',
+                sessionId,
+                data: submitProbe,
+              },
+            },
+          },
+        },
+        {
+          event: 'terminal.session.output',
+          payload: {
+            sessionId,
+            stream: 'stdout',
+            data: 'Claude Code v2.1.59\r\nWelcome to Opus 4.6\r\n',
+            cursor: 64,
           },
         },
         {
@@ -491,6 +531,16 @@ async function main() {
       }
       if (!tabText.includes('[Process exited with code 0]')) {
         throw new Error('Terminal-session replay did not mark session exit.');
+      }
+    } else if (scenario === 'terminal-session-race') {
+      if (!markers.hasTerminalSessionOutput) {
+        throw new Error('Terminal-session race replay did not stream expected output to tab.');
+      }
+      if (!markers.hasSubmitProbeEcho) {
+        throw new Error('Terminal-session race replay dropped optimistic process input before attach.');
+      }
+      if (!tabText.includes('[Process exited with code 0]')) {
+        throw new Error('Terminal-session race replay did not mark session exit.');
       }
     } else {
       if (markers.containsLiteralCursorMoves || markers.csiFragmentCount > 12) {

@@ -45,6 +45,7 @@ const capturedExternalExecutionKeys = [];
 const capturedExternalExecutionSet = new Set();
 const openclawToolTabsByToolCallId = new Map();
 const openclawToolTabsBySessionId = new Map();
+const recentOptimisticAgentInputsBySessionId = new Map();
 const pendingProcessInputsBySessionId = new Map();
 const pendingOperatorInputsByToolCallId = new Map();
 const pendingOperatorResizeByToolCallId = new Map();
@@ -296,7 +297,10 @@ function resolveOpenclawTabEntryByToolCallId(toolCallId) {
   openclawToolTabsByToolCallId.delete(toolCallId);
   pendingOperatorInputsByToolCallId.delete(toolCallId);
   pendingOperatorResizeByToolCallId.delete(toolCallId);
-  if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+  if (entry.sessionId) {
+    openclawToolTabsBySessionId.delete(entry.sessionId);
+    recentOptimisticAgentInputsBySessionId.delete(entry.sessionId);
+  }
   return null;
 }
 
@@ -308,6 +312,7 @@ function resolveOpenclawTabEntryBySessionId(sessionId) {
   const stillOpen = tabs.some((tab) => tab.id === entry.tabId);
   if (stillOpen) return entry;
   openclawToolTabsBySessionId.delete(sessionId);
+  recentOptimisticAgentInputsBySessionId.delete(sessionId);
   clearOpenclawSessionBindingTimeout(entry.toolCallId);
   openclawToolTabsByToolCallId.delete(entry.toolCallId);
   pendingOperatorInputsByToolCallId.delete(entry.toolCallId);
@@ -358,6 +363,29 @@ function appendOpenclawInput(entry, text) {
   if (entry.tab.term?.write) {
     entry.tab.term.write(normalized);
   }
+}
+
+function rememberOptimisticAgentInput(sessionId, data) {
+  const normalizedSessionId = trimToString(sessionId);
+  if (!normalizedSessionId || typeof data !== 'string' || !data) return;
+  recentOptimisticAgentInputsBySessionId.set(normalizedSessionId, {
+    data,
+    ts: Date.now(),
+  });
+}
+
+function consumeMatchingOptimisticAgentInput(sessionId, data) {
+  const normalizedSessionId = trimToString(sessionId);
+  if (!normalizedSessionId || typeof data !== 'string' || !data) return false;
+  const recent = recentOptimisticAgentInputsBySessionId.get(normalizedSessionId);
+  if (!recent) return false;
+  if (Date.now() - recent.ts > 2000) {
+    recentOptimisticAgentInputsBySessionId.delete(normalizedSessionId);
+    return false;
+  }
+  if (recent.data !== data) return false;
+  recentOptimisticAgentInputsBySessionId.delete(normalizedSessionId);
+  return true;
 }
 
 function appendOpenclawTail(entry, tailText) {
@@ -973,7 +1001,10 @@ function markOpenclawSessionExited(entry, exitCode) {
   pendingOperatorInputsByToolCallId.delete(toolCallId);
   pendingOperatorResizeByToolCallId.delete(toolCallId);
   openclawToolTabsByToolCallId.delete(toolCallId);
-  if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+  if (entry.sessionId) {
+    openclawToolTabsBySessionId.delete(entry.sessionId);
+    recentOptimisticAgentInputsBySessionId.delete(entry.sessionId);
+  }
   if (typeof entry.tab.markExited === 'function') entry.tab.markExited(normalizedCode);
 }
 
@@ -987,7 +1018,10 @@ function registerOpenclawSession(entry, sessionId) {
     return;
   }
   clearOpenclawSessionBindingTimeout(entry.toolCallId);
-  if (entry.sessionId) openclawToolTabsBySessionId.delete(entry.sessionId);
+  if (entry.sessionId) {
+    openclawToolTabsBySessionId.delete(entry.sessionId);
+    recentOptimisticAgentInputsBySessionId.delete(entry.sessionId);
+  }
   entry.sessionId = normalized;
   entry.tab.terminalSessionId = normalized;
   if (typeof entry.tab.setTerminalSessionId === 'function') {
@@ -1147,15 +1181,25 @@ function handleOpenclawProcessToolEvent(phase, data) {
   if (!sessionId) return;
   const input = resolveProcessInputFromArgs(args);
   if (!input) return;
-  const normalized = normalizeTerminalLineEndings(input);
-  if (!normalized) return;
+  const normalizedRaw = normalizeTerminalLineEndings(input);
+  if (!normalizedRaw) return;
   const entry = resolveOpenclawTabEntryBySessionId(sessionId) || tryBackfillOpenclawSessionFromProcessEvent(sessionId);
   if (entry) {
-    if (entry.mode !== 'session') appendOpenclawInput(entry, normalized);
+    if (entry.mode !== 'session') {
+      appendOpenclawInput(entry, normalizedRaw);
+      return;
+    }
+    if (entry.sessionAttached !== true) {
+      const renderInput = /\r$/.test(normalizedRaw) && !/\n/.test(normalizedRaw)
+        ? `${normalizedRaw}\n`
+        : normalizedRaw;
+      appendOpenclawInput(entry, renderInput);
+      rememberOptimisticAgentInput(sessionId, normalizedRaw);
+    }
     return;
   }
   const pending = pendingProcessInputsBySessionId.get(sessionId) || [];
-  pending.push(normalized);
+  pending.push(normalizedRaw);
   pendingProcessInputsBySessionId.set(sessionId, pending);
 }
 
@@ -1188,6 +1232,7 @@ function handleOpenclawTerminalSessionInput(payload) {
   if (entry.sessionAttached !== true) entry.sessionAttached = true;
   const data = typeof payload?.data === 'string' ? payload.data : '';
   if (!data) return;
+  if (consumeMatchingOptimisticAgentInput(sessionId, normalizeTerminalLineEndings(data))) return;
   const actor = trimToString(payload?.actor).toLowerCase();
   if (actor === 'operator') return;
   const hasVisibleChars = /[^\r\n\t ]/.test(data);
