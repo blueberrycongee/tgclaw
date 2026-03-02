@@ -47,6 +47,8 @@ export interface ProcessSession {
   pendingStderrChars: number;
   aggregated: string;
   tail: string;
+  rawAggregated?: string;
+  rawTail?: string;
   exitCode?: number | null;
   exitSignal?: NodeJS.Signals | number | null;
   exited: boolean;

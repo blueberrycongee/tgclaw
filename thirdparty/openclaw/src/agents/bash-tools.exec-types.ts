@@ -43,6 +43,7 @@ export type ExecToolDetails =
       startedAt: number;
       cwd?: string;
       tail?: string;
+      rawTail?: string;
     }
   | {
       status: "completed" | "failed";
@@ -50,6 +51,7 @@ export type ExecToolDetails =
       durationMs: number;
       aggregated: string;
       cwd?: string;
+      rawTail?: string;
     }
   | {
       status: "approval-pending";

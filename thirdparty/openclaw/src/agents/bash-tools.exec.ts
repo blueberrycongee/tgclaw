@@ -522,6 +522,7 @@ export function createExecTool(
               startedAt: run.startedAt,
               cwd: run.session.cwd,
               tail: run.session.tail,
+              rawTail: run.session.rawTail,
             },
           });
 
@@ -577,6 +578,7 @@ export function createExecTool(
                 durationMs: outcome.durationMs,
                 aggregated: outcome.aggregated,
                 cwd: run.session.cwd,
+                rawTail: run.session.rawTail,
               },
             });
           })

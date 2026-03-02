@@ -314,6 +314,8 @@ export async function runExecProcess(opts: {
     pendingStderrChars: 0,
     aggregated: "",
     tail: "",
+    rawAggregated: "",
+    rawTail: "",
     exited: false,
     exitCode: undefined as number | null | undefined,
     exitSignal: undefined as NodeJS.Signals | number | null | undefined,
@@ -337,11 +339,22 @@ export async function runExecProcess(opts: {
         startedAt,
         cwd: session.cwd,
         tail: session.tail,
+        rawTail: session.rawTail,
       },
     });
   };
 
+  const appendRawOutput = (chunk: string) => {
+    if (!usingPty || !chunk) {
+      return;
+    }
+    const nextRaw = tail(`${session.rawAggregated || ""}${chunk}`, session.maxOutputChars);
+    session.rawAggregated = nextRaw;
+    session.rawTail = tail(nextRaw, 2000);
+  };
+
   const handleStdout = (data: string) => {
+    appendRawOutput(data);
     const str = sanitizeBinaryOutput(data.toString());
     for (const chunk of chunkString(str)) {
       appendOutput(session, "stdout", chunk);
@@ -350,6 +363,7 @@ export async function runExecProcess(opts: {
   };
 
   const handleStderr = (data: string) => {
+    appendRawOutput(data);
     const str = sanitizeBinaryOutput(data.toString());
     for (const chunk of chunkString(str)) {
       appendOutput(session, "stderr", chunk);
