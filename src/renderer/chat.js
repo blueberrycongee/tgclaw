@@ -52,6 +52,9 @@ const pendingOperatorResizeByToolCallId = new Map();
 const openclawSessionBindingTimeoutsByToolCallId = new Map();
 const OPENCLAW_EXEC_SESSION_BIND_TIMEOUT_MS = window.tgclaw?.isE2E ? 1200 : 6000;
 const OPENCLAW_PROCESS_SESSION_BACKFILL_MAX_AGE_MS = window.tgclaw?.isE2E ? 120000 : 30000;
+const OPENCLAW_OPTIMISTIC_INPUT_TTL_MS = 5000;
+const OPENCLAW_OPTIMISTIC_INPUT_QUEUE_LIMIT = 24;
+const OPENCLAW_PENDING_PROCESS_INPUT_QUEUE_LIMIT = 120;
 const INTERACTIVE_AGENT_COMMANDS = new Set(['claude', 'codex', 'opencode', 'gemini', 'kimi', 'goose', 'aider']);
 let gatewayToolEventsEnabled = false;
 let gatewayTerminalSessionsEnabled = false;
@@ -368,24 +371,66 @@ function appendOpenclawInput(entry, text) {
 function rememberOptimisticAgentInput(sessionId, data) {
   const normalizedSessionId = trimToString(sessionId);
   if (!normalizedSessionId || typeof data !== 'string' || !data) return;
-  recentOptimisticAgentInputsBySessionId.set(normalizedSessionId, {
-    data,
-    ts: Date.now(),
-  });
+  const now = Date.now();
+  const queue = recentOptimisticAgentInputsBySessionId.get(normalizedSessionId) || [];
+  const fresh = queue.filter((item) => now - item.ts <= OPENCLAW_OPTIMISTIC_INPUT_TTL_MS);
+  fresh.push({ data, ts: now });
+  if (fresh.length > OPENCLAW_OPTIMISTIC_INPUT_QUEUE_LIMIT) {
+    fresh.splice(0, fresh.length - OPENCLAW_OPTIMISTIC_INPUT_QUEUE_LIMIT);
+  }
+  recentOptimisticAgentInputsBySessionId.set(normalizedSessionId, fresh);
 }
 
 function consumeMatchingOptimisticAgentInput(sessionId, data) {
   const normalizedSessionId = trimToString(sessionId);
   if (!normalizedSessionId || typeof data !== 'string' || !data) return false;
   const recent = recentOptimisticAgentInputsBySessionId.get(normalizedSessionId);
-  if (!recent) return false;
-  if (Date.now() - recent.ts > 2000) {
+  if (!Array.isArray(recent) || recent.length === 0) return false;
+  const now = Date.now();
+  const fresh = recent.filter((item) => now - item.ts <= OPENCLAW_OPTIMISTIC_INPUT_TTL_MS);
+  if (fresh.length === 0) {
     recentOptimisticAgentInputsBySessionId.delete(normalizedSessionId);
     return false;
   }
-  if (recent.data !== data) return false;
-  recentOptimisticAgentInputsBySessionId.delete(normalizedSessionId);
+  const matchIndex = fresh.findIndex((item) => item.data === data);
+  if (matchIndex < 0) {
+    recentOptimisticAgentInputsBySessionId.set(normalizedSessionId, fresh);
+    return false;
+  }
+  fresh.splice(matchIndex, 1);
+  if (fresh.length === 0) recentOptimisticAgentInputsBySessionId.delete(normalizedSessionId);
+  else recentOptimisticAgentInputsBySessionId.set(normalizedSessionId, fresh);
   return true;
+}
+
+function queuePendingProcessInput(sessionId, normalizedInput) {
+  const normalizedSessionId = trimToString(sessionId);
+  if (!normalizedSessionId || typeof normalizedInput !== 'string' || !normalizedInput) return;
+  const pending = pendingProcessInputsBySessionId.get(normalizedSessionId) || [];
+  pending.push(normalizedInput);
+  if (pending.length > OPENCLAW_PENDING_PROCESS_INPUT_QUEUE_LIMIT) {
+    pending.splice(0, pending.length - OPENCLAW_PENDING_PROCESS_INPUT_QUEUE_LIMIT);
+  }
+  pendingProcessInputsBySessionId.set(normalizedSessionId, pending);
+}
+
+function flushPendingProcessInputs(entry, sessionId) {
+  const normalizedSessionId = trimToString(sessionId);
+  if (!entry || !normalizedSessionId) return;
+  const pending = pendingProcessInputsBySessionId.get(normalizedSessionId);
+  if (!Array.isArray(pending) || pending.length === 0) return;
+  pending.forEach((text) => {
+    if (entry.mode !== 'session') {
+      appendOpenclawInput(entry, text);
+      return;
+    }
+    const renderInput = /\r$/.test(text) && !/\n/.test(text)
+      ? `${text}\n`
+      : text;
+    appendOpenclawInput(entry, renderInput);
+    rememberOptimisticAgentInput(normalizedSessionId, text);
+  });
+  pendingProcessInputsBySessionId.delete(normalizedSessionId);
 }
 
 function appendOpenclawTail(entry, tailText) {
@@ -1012,6 +1057,7 @@ function registerOpenclawSession(entry, sessionId) {
   const normalized = trimToString(sessionId);
   if (!entry || !normalized) return;
   if (entry.sessionId === normalized) {
+    flushPendingProcessInputs(entry, normalized);
     if (entry.mode === 'session' && entry.sessionAttached !== true) {
       void attachOpenclawTerminalSession(entry, normalized);
     }
@@ -1028,14 +1074,10 @@ function registerOpenclawSession(entry, sessionId) {
     entry.tab.setTerminalSessionId(normalized);
   }
   openclawToolTabsBySessionId.set(normalized, entry);
+  flushPendingProcessInputs(entry, normalized);
   if (entry.mode === 'session') {
     void attachOpenclawTerminalSession(entry, normalized);
     return;
-  }
-  const pending = pendingProcessInputsBySessionId.get(normalized);
-  if (pending && pending.length > 0) {
-    pending.forEach((text) => appendOpenclawInput(entry, text));
-    pendingProcessInputsBySessionId.delete(normalized);
   }
 }
 
@@ -1189,18 +1231,14 @@ function handleOpenclawProcessToolEvent(phase, data) {
       appendOpenclawInput(entry, normalizedRaw);
       return;
     }
-    if (entry.sessionAttached !== true) {
-      const renderInput = /\r$/.test(normalizedRaw) && !/\n/.test(normalizedRaw)
-        ? `${normalizedRaw}\n`
-        : normalizedRaw;
-      appendOpenclawInput(entry, renderInput);
-      rememberOptimisticAgentInput(sessionId, normalizedRaw);
-    }
+    const renderInput = /\r$/.test(normalizedRaw) && !/\n/.test(normalizedRaw)
+      ? `${normalizedRaw}\n`
+      : normalizedRaw;
+    appendOpenclawInput(entry, renderInput);
+    rememberOptimisticAgentInput(sessionId, normalizedRaw);
     return;
   }
-  const pending = pendingProcessInputsBySessionId.get(sessionId) || [];
-  pending.push(normalizedRaw);
-  pendingProcessInputsBySessionId.set(sessionId, pending);
+  queuePendingProcessInput(sessionId, normalizedRaw);
 }
 
 function resolveOpenclawSessionEntry(sessionId) {

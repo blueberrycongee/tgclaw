@@ -330,6 +330,21 @@ async function main() {
           },
         },
         {
+          event: 'agent',
+          payload: {
+            stream: 'tool',
+            data: {
+              phase: 'start',
+              name: 'process',
+              args: {
+                action: 'submit',
+                sessionId,
+                data: submitProbe,
+              },
+            },
+          },
+        },
+        {
           event: 'terminal.session.input',
           payload: {
             sessionId,
@@ -529,6 +544,9 @@ async function main() {
     } else if (scenario === 'terminal-session') {
       if (!markers.hasTerminalSessionOutput) {
         throw new Error('Terminal-session replay did not stream expected output to tab.');
+      }
+      if (!markers.hasSubmitProbeEcho) {
+        throw new Error('Terminal-session replay dropped process input emitted after attach.');
       }
       if (!markers.hasTerminalSessionInput) {
         throw new Error('Terminal-session replay did not render expected input echo to tab.');
