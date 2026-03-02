@@ -134,3 +134,55 @@ Added a dedicated terminal-session control plane in OpenClaw gateway:
 - Added per-connection session subscription registry and automatic cleanup on WebSocket disconnect.
 
 This provides a first-class streaming API for terminal consumers while preserving legacy tool-event behavior.
+
+### Patch #4: Make `process submit` send payload data before CR
+
+**File**: `src/agents/bash-tools.process.ts`
+
+#### Problem
+
+`process` tool action `submit` previously ignored `data` and always wrote only `"\r"`.
+This made agent automation appear to "submit prompts" while the underlying CLI session only received Enter.
+
+#### Solution
+
+Changed `submit` write behavior from:
+- `"\r"` only
+
+to:
+- `${data}\r` (with empty-string fallback)
+
+Input event publishing now mirrors the exact bytes written.
+
+#### Validation
+
+- Added unit coverage in:
+  - `src/agents/bash-tools.process.send-keys.test.ts`
+- New test asserts `submit` includes provided text before Enter.
+
+### Patch #5: Reuse running interactive PTY sessions for repeated `exec` starts
+
+**Files**:
+- `src/agents/bash-tools.exec.ts`
+- `src/agents/bash-tools.exec.reuse.test.ts`
+
+#### Problem
+
+Repeated agent requests to start interactive coding CLIs (for example `claude`) created new background sessions each time, fragmenting human/agent collaboration and losing continuity.
+
+#### Solution
+
+Added guarded reuse logic in `exec`:
+- Applies only when all conditions match:
+  - PTY mode
+  - background/yield continuation requested
+  - command is a known interactive CLI (`claude`, `codex`, `opencode`)
+  - same `cwd`
+  - same `scopeKey`
+  - existing running background session
+- Reuses the newest matching running session and returns it as `status: "running"` instead of spawning a new process.
+
+#### Validation
+
+- Added targeted unit tests in:
+  - `src/agents/bash-tools.exec.reuse.test.ts`
