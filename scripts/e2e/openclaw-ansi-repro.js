@@ -467,6 +467,13 @@ async function main() {
       );
     }
 
+    if (scenario === 'terminal-session' || scenario === 'terminal-session-race') {
+      const supportEnabled = await setTerminalSessionSupport(page, true);
+      if (!supportEnabled) {
+        throw new Error('Failed re-enabling terminal-session support before frame injection.');
+      }
+    }
+
     for (const frame of frames) {
       const ok = await emitGatewayEvent(page, frame);
       if (!ok) throw new Error('Failed injecting gateway frame via e2e bridge.');
