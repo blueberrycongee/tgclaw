@@ -17,6 +17,7 @@ function clampTtl(value: number | undefined) {
 let jobTtlMs = clampTtl(Number.parseInt(process.env.PI_BASH_JOB_TTL_MS ?? "", 10));
 
 export type ProcessStatus = "running" | "completed" | "failed" | "killed";
+export type ExitedProcessStatus = Exclude<ProcessStatus, "running">;
 
 export type SessionStdin = {
   write: (data: string, cb?: (err?: Error | null) => void) => void;
@@ -65,7 +66,7 @@ export interface FinishedSession {
   startedAt: number;
   endedAt: number;
   cwd?: string;
-  status: ProcessStatus;
+  status: ExitedProcessStatus;
   exitCode?: number | null;
   exitSignal?: NodeJS.Signals | number | null;
   aggregated: string;
@@ -149,7 +150,7 @@ export function markExited(
   session: ProcessSession,
   exitCode: number | null,
   exitSignal: NodeJS.Signals | number | null,
-  status: ProcessStatus,
+  status: ExitedProcessStatus,
 ) {
   const wasExited = session.exited;
   session.exited = true;
@@ -173,7 +174,7 @@ export function markBackgrounded(session: ProcessSession) {
   session.backgrounded = true;
 }
 
-function moveToFinished(session: ProcessSession, status: ProcessStatus) {
+function moveToFinished(session: ProcessSession, status: ExitedProcessStatus) {
   runningSessions.delete(session.id);
 
   // Clean up child process stdio streams to prevent FD leaks
