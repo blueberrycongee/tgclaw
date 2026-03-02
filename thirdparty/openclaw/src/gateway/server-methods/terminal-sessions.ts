@@ -26,9 +26,14 @@ function resolveSessionId(params: Record<string, unknown>): string {
 }
 
 function readRecentOutput(session: ProcessSession): string {
-  const raw = typeof session.rawTail === "string" ? session.rawTail : "";
-  if (raw) {
-    return raw;
+  const rawAggregated =
+    typeof session.rawAggregated === "string" ? session.rawAggregated : "";
+  if (rawAggregated) {
+    return rawAggregated;
+  }
+  const rawTail = typeof session.rawTail === "string" ? session.rawTail : "";
+  if (rawTail) {
+    return rawTail;
   }
   return session.tail || session.aggregated || "";
 }
